@@ -159,15 +159,19 @@ const getApiClient = (): AxiosInstance => {
 export const api: AxiosInstance = new Proxy({} as AxiosInstance, {
   get: (_target, prop) => {
     const client = getApiClient();
-    const value = (client as any)[prop];
+    const clientWithProps =
+      client as AxiosInstance & Record<PropertyKey, unknown>;
+    const value = clientWithProps[prop];
     if (typeof value === "function") {
-      return value.bind(client);
+      return (value as (...args: unknown[]) => unknown).bind(client);
     }
     return value;
   },
   set: (_target, prop, value) => {
     const client = getApiClient();
-    (client as any)[prop] = value;
+    const clientWithProps =
+      client as AxiosInstance & Record<PropertyKey, unknown>;
+    clientWithProps[prop] = value;
     return true;
   },
 });
