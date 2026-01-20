@@ -3,23 +3,8 @@ import { api } from "@/lib/api";
 import { IAnimeDetails } from "@/types/anime-details";
 import { useQuery } from "react-query";
 import { PLACEHOLDER_POSTER } from "@/utils/constants";
-
-type BackendAnime = {
-  id: string;
-  title: string;
-  title_original?: string | null;
-  description?: string | null;
-  year?: number | null;
-  status?: string | null;
-};
-
-type BackendRelease = {
-  id: string;
-  anime_id: string;
-  title: string;
-  year?: number | null;
-  status?: string | null;
-};
+import { BackendAnime, BackendRelease } from "@/mappers/common";
+import { mapBackendReleaseToSeason } from "@/mappers/anime.mapper";
 
 const getAnimeDetails = async (animeId: string) => {
   const emptyDetails: IAnimeDetails = {
@@ -70,13 +55,9 @@ const getAnimeDetails = async (animeId: string) => {
     (releasesRes.data || []).filter((release) => release.anime_id === animeId) ||
     [];
 
-  const seasons = releases.map((release, idx) => ({
-    id: release.id,
-    name: release.title,
-    title: release.title,
-    poster: PLACEHOLDER_POSTER,
-    isCurrent: idx === 0,
-  }));
+  const seasons = releases.map((release, idx) => 
+    mapBackendReleaseToSeason(release, idx === 0)
+  );
 
   return {
     ...emptyDetails,

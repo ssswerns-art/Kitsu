@@ -2,17 +2,8 @@ import { queryKeys } from "@/constants/query-keys";
 import { api } from "@/lib/api";
 import { IEpisodes } from "@/types/episodes";
 import { useQuery } from "react-query";
-
-type BackendRelease = {
-  id: string;
-  anime_id: string;
-};
-
-type BackendEpisode = {
-  id: string;
-  number: number;
-  title?: string | null;
-};
+import { BackendRelease, BackendEpisode } from "@/mappers/common";
+import { mapBackendEpisodeToEpisode } from "@/mappers/episode.mapper";
 
 const getAllEpisodes = async (animeId: string) => {
   const releasesRes = await api.get<BackendRelease[]>("/releases", {
@@ -30,13 +21,7 @@ const getAllEpisodes = async (animeId: string) => {
     params: { release_id: release.id },
   });
 
-  const episodes =
-    (res.data || []).map((episode) => ({
-      title: episode.title || `Episode ${episode.number}`,
-      episodeId: episode.id,
-      number: episode.number,
-      isFiller: false,
-    })) || [];
+  const episodes = (res.data || []).map(mapBackendEpisodeToEpisode);
 
   return { totalEpisodes: episodes.length, episodes } as IEpisodes;
 };

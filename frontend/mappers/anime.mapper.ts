@@ -1,0 +1,144 @@
+import { 
+  IAnime, 
+  ISuggestionAnime, 
+  SpotlightAnime, 
+  TopUpcomingAnime,
+  Type 
+} from "@/types/anime";
+import { Season } from "@/types/anime-details";
+import { PLACEHOLDER_POSTER } from "@/utils/constants";
+import { BackendAnime, BackendRelease } from "./common";
+
+/**
+ * Maps backend status string to frontend Type enum
+ * Returns undefined for null/empty status or unknown values
+ * PURE function - no optional chaining
+ */
+export function mapStatusToType(status?: string | null): Type | undefined {
+  if (!status) {
+    return undefined;
+  }
+
+  const normalizedStatus = status.toUpperCase();
+
+  switch (normalizedStatus) {
+    case "TV":
+      return Type.Tv;
+    case "ONA":
+      return Type.Ona;
+    case "MOVIE":
+      return Type.Movie;
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * Maps BackendAnime to IAnime
+ * PURE function - no fallbacks, no optional chaining
+ * Throws for required fields only
+ */
+export function mapBackendAnimeToIAnime(dto: BackendAnime): IAnime {
+  if (!dto.id) throw new Error("Anime.id is required");
+  if (!dto.title) throw new Error("Anime.title is required");
+
+  return {
+    id: dto.id,
+    name: dto.title,
+    jname: dto.title_original || dto.title,
+    poster: PLACEHOLDER_POSTER,
+    episodes: { sub: null, dub: null },
+    type: mapStatusToType(dto.status),
+    rank: undefined,
+  };
+}
+
+/**
+ * Maps BackendAnime to ISuggestionAnime
+ * PURE function - no fallbacks, no optional chaining
+ */
+export function mapBackendAnimeToSuggestionAnime(dto: BackendAnime): ISuggestionAnime {
+  if (!dto.id) throw new Error("Anime.id is required");
+  if (!dto.title) throw new Error("Anime.title is required");
+
+  return {
+    id: dto.id,
+    name: dto.title,
+    jname: dto.title_original || dto.title,
+    poster: PLACEHOLDER_POSTER,
+    episodes: { sub: null, dub: null },
+    type: mapStatusToType(dto.status),
+    rank: undefined,
+    moreInfo: [],
+  };
+}
+
+/**
+ * Maps BackendAnime to SpotlightAnime
+ * PURE function - no fallbacks, no optional chaining
+ * SpotlightAnime.type is required, so we throw if status is missing/invalid
+ */
+export function mapBackendAnimeToSpotlightAnime(dto: BackendAnime, rank: number): SpotlightAnime {
+  if (!dto.id) throw new Error("Anime.id is required");
+  if (!dto.title) throw new Error("Anime.title is required");
+  
+  const type = mapStatusToType(dto.status);
+  if (!type) {
+    throw new Error(`Invalid or missing anime status for SpotlightAnime: ${dto.status}`);
+  }
+
+  return {
+    rank,
+    id: dto.id,
+    name: dto.title,
+    description: "",
+    poster: PLACEHOLDER_POSTER,
+    jname: dto.title_original || dto.title,
+    episodes: { sub: null, dub: null },
+    type,
+    otherInfo: [],
+  };
+}
+
+/**
+ * Maps BackendAnime to TopUpcomingAnime
+ * PURE function - no fallbacks, no optional chaining
+ * TopUpcomingAnime.type is string, so we convert Type enum to string
+ */
+export function mapBackendAnimeToTopUpcomingAnime(dto: BackendAnime): TopUpcomingAnime {
+  if (!dto.id) throw new Error("Anime.id is required");
+  if (!dto.title) throw new Error("Anime.title is required");
+
+  const type = mapStatusToType(dto.status);
+  if (!type) {
+    throw new Error(`Invalid or missing anime status for TopUpcomingAnime: ${dto.status}`);
+  }
+
+  return {
+    id: dto.id,
+    name: dto.title,
+    jname: dto.title_original || dto.title,
+    poster: PLACEHOLDER_POSTER,
+    duration: "",
+    type: type as string,
+    rating: null,
+    episodes: { sub: null, dub: null },
+  };
+}
+
+/**
+ * Maps BackendRelease to Season
+ * PURE function - no fallbacks, no optional chaining
+ */
+export function mapBackendReleaseToSeason(dto: BackendRelease, isCurrent: boolean): Season {
+  if (!dto.id) throw new Error("Release.id is required");
+  if (!dto.title) throw new Error("Release.title is required");
+
+  return {
+    id: dto.id,
+    name: dto.title,
+    title: dto.title,
+    poster: PLACEHOLDER_POSTER,
+    isCurrent,
+  };
+}
