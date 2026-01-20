@@ -13,6 +13,9 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import StoreProvider from "@/providers/store-provider";
 
+// Root layout is always server-side rendered in Next.js App Router
+// No need to assert render mode as it's enforced by framework
+
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
   variable: "--font-geist-sans",
