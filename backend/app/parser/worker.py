@@ -207,8 +207,8 @@ class ParserWorker:
                 session=session,
             )
             
-            # Sync catalog (read-only dry run for now)
-            result = sync_service.sync_all(persist=True, publish=False)
+            # Sync catalog - respect autopublish setting
+            result = sync_service.sync_all(persist=True, publish=settings.autopublish_enabled)
             
             await self._finish_job(session, job_id, source["id"], "success", None)
             await session.commit()
