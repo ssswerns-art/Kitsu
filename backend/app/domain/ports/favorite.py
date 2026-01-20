@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import AsyncContextManager, Callable
+from typing import AsyncContextManager, Callable
 from datetime import datetime
 import uuid
 from typing import Protocol
