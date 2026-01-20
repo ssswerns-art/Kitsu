@@ -60,54 +60,49 @@ const getAnimeDetails = async (animeId: string) => {
     recommendedAnimes: [],
   };
 
-  try {
-    const [animeRes, releasesRes] = await Promise.all([
-      api.get<BackendAnime>(`/anime/${animeId}`),
-      api.get<BackendRelease[]>("/releases", { params: { limit: 100, offset: 0 } }),
-    ]);
+  const [animeRes, releasesRes] = await Promise.all([
+    api.get<BackendAnime>(`/anime/${animeId}`),
+    api.get<BackendRelease[]>("/releases", { params: { limit: 100, offset: 0 } }),
+  ]);
 
-    const anime = animeRes.data;
-    const releases =
-      (releasesRes.data || []).filter((release) => release.anime_id === animeId) ||
-      [];
+  const anime = animeRes.data;
+  const releases =
+    (releasesRes.data || []).filter((release) => release.anime_id === animeId) ||
+    [];
 
-    const seasons = releases.map((release, idx) => ({
-      id: release.id,
-      name: release.title,
-      title: release.title,
-      poster: PLACEHOLDER_POSTER,
-      isCurrent: idx === 0,
-    }));
+  const seasons = releases.map((release, idx) => ({
+    id: release.id,
+    name: release.title,
+    title: release.title,
+    poster: PLACEHOLDER_POSTER,
+    isCurrent: idx === 0,
+  }));
 
-    return {
-      ...emptyDetails,
-      anime: {
-        info: {
-          ...emptyDetails.anime.info,
-          id: anime.id,
-          name: anime.title,
-          description: anime.description || "",
-          stats: {
-            rating: anime.status || "",
-            quality: "",
-            episodes: { sub: 0, dub: 0 },
-            type: anime.status || "Unknown",
-            duration: "",
-          },
-        },
-        moreInfo: {
-          ...emptyDetails.anime.moreInfo,
-          japanese: anime.title_original || anime.title,
-          aired: anime.year ? anime.year.toString() : "N/A",
-          status: anime.status || "Unknown",
+  return {
+    ...emptyDetails,
+    anime: {
+      info: {
+        ...emptyDetails.anime.info,
+        id: anime.id,
+        name: anime.title,
+        description: anime.description || "",
+        stats: {
+          rating: anime.status || "",
+          quality: "",
+          episodes: { sub: 0, dub: 0 },
+          type: anime.status || "Unknown",
+          duration: "",
         },
       },
-      seasons,
-    };
-  } catch (error) {
-    console.error("Failed to fetch anime details", error);
-    return emptyDetails;
-  }
+      moreInfo: {
+        ...emptyDetails.anime.moreInfo,
+        japanese: anime.title_original || anime.title,
+        aired: anime.year ? anime.year.toString() : "N/A",
+        status: anime.status || "Unknown",
+      },
+    },
+    seasons,
+  };
 };
 
 export const useGetAnimeDetails = (animeId: string) => {

@@ -12,74 +12,69 @@ export type ApiError = {
 export const normalizeApiError = (error: unknown): ApiError => {
   if (error instanceof AxiosError) {
     const status = error.response?.status;
-    const payload = error.response?.data as {
-      code?: string;
-      message?: string;
-      details?: unknown;
+    
+    // Backend contract: all API errors have { error: { code, message, details } }
+    const errorEnvelope = error.response?.data as {
+      error?: {
+        code: string;
+        message: string;
+        details?: unknown;
+      };
     } | undefined;
-    const baseMessage =
-      typeof payload?.message === "string"
-        ? payload.message
-        : error.message || "Request failed. Please try again.";
-    if (status === 401) {
+    
+    // If backend returned canonical error format, use it
+    if (errorEnvelope?.error) {
       return {
-        code: payload?.code || "unauthorized",
-        message: payload?.message || "Session expired. Please sign in again.",
-        details: payload?.details,
+        code: errorEnvelope.error.code,
+        message: errorEnvelope.error.message,
         status,
+        details: errorEnvelope.error.details,
       };
     }
-    if (status === 403) {
-      return {
-        code: payload?.code || "forbidden",
-        message: payload?.message || "Access denied.",
-        details: payload?.details,
-        status,
-      };
-    }
-    if (status && status >= 500) {
-      return {
-        code: payload?.code || "server_error",
-        message:
-          payload?.message ||
-          "Something went wrong on our side. Please try again.",
-        details: payload?.details,
-        status,
-      };
-    }
+    
+    // Network-level errors (timeouts, connection failures)
+    // These are NOT backend errors - they're Axios/network errors
     if (error.code === "ECONNABORTED") {
       return {
-        code: "timeout",
+        code: "network_timeout",
         message: "Request timed out. Please retry.",
         status,
-        details: payload?.details,
       };
     }
+    
+    if (!error.response) {
+      // No response = network error
+      return {
+        code: "network_error",
+        message: error.message || "Network error. Please check your connection.",
+        status,
+      };
+    }
+    
+    // If we reach here, backend violated the contract
+    // This should never happen after FIX-02A
     return {
-      code: payload?.code || "request_failed",
-      message: baseMessage,
+      code: "malformed_error",
+      message: "Server returned malformed error response.",
       status,
-      details: payload?.details,
     };
   }
+  
+  // Already normalized ApiError
   if (error && typeof error === "object") {
     const candidate = error as ApiError;
     if (
       typeof candidate.code === "string" &&
-      typeof candidate.message === "string" &&
-      (candidate.status === undefined || typeof candidate.status === "number")
+      typeof candidate.message === "string"
     ) {
-      return {
-        code: candidate.code,
-        message: candidate.message,
-        status: candidate.status,
-        details: candidate.details,
-      };
+      return candidate;
     }
   }
+  
+  // Unexpected error type
   return {
-    code: "unknown_error",
-    message: "Unexpected error occurred.",
+    code: "unexpected_error",
+    message: String(error) || "Unexpected error occurred.",
   };
 };
 
@@ -140,12 +135,15 @@ const handleAuthFailure = () => {
 export const handleAuthError = (error: unknown): never => {
   const normalizedError = normalizeApiError(error);
 
-  if (normalizedError.status === 401) {
+  // Backend contract: use error.code to determine auth failures
+  // AUTH_ERROR = 401 (expired/invalid token)
+  // PERMISSION_DENIED = 403 (revoked token or insufficient permissions)
+  if (normalizedError.code === "AUTH_ERROR") {
     handleAuthFailure();
     throw normalizedError;
   }
 
-  if (normalizedError.status === 403) {
+  if (normalizedError.code === "PERMISSION_DENIED") {
     handleAuthFailure();
     throw normalizedError;
   }

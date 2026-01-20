@@ -63,55 +63,50 @@ const getHomePageData: QueryFunction<
     genres: [],
   };
 
-  try {
-    const res = await api.get<BackendAnime[]>("/anime", {
-      params: { limit: 20, offset: 0 },
-    });
-    const mapped = mapAnimeList(res.data || []);
-    const spotlightAnimes: SpotlightAnime[] = mapped.slice(0, 5).map((anime, idx) => ({
-      rank: idx + 1,
-      id: anime.id,
-      name: anime.name,
-      description: "",
-      poster: anime.poster,
-      jname: anime.jname,
-      episodes: anime.episodes,
-      type: withTypeFallback(anime.type),
-      otherInfo: [],
-    }));
-    const topUpcomingAnimes: TopUpcomingAnime[] = mapped.map((anime) => ({
-      id: anime.id,
-      name: anime.name,
-      jname: anime.jname,
-      poster: anime.poster,
-      duration: anime.duration || "",
-      type: withTypeFallback(anime.type),
-      rating: anime.rating,
-      episodes: anime.episodes,
-    }));
+  const res = await api.get<BackendAnime[]>("/anime", {
+    params: { limit: 20, offset: 0 },
+  });
+  const mapped = mapAnimeList(res.data || []);
+  const spotlightAnimes: SpotlightAnime[] = mapped.slice(0, 5).map((anime, idx) => ({
+    rank: idx + 1,
+    id: anime.id,
+    name: anime.name,
+    description: "",
+    poster: anime.poster,
+    jname: anime.jname,
+    episodes: anime.episodes,
+    type: withTypeFallback(anime.type),
+    otherInfo: [],
+  }));
+  const topUpcomingAnimes: TopUpcomingAnime[] = mapped.map((anime) => ({
+    id: anime.id,
+    name: anime.name,
+    jname: anime.jname,
+    poster: anime.poster,
+    duration: anime.duration || "",
+    type: withTypeFallback(anime.type),
+    rating: anime.rating,
+    episodes: anime.episodes,
+  }));
 
-    const data: IAnimeData = {
-      ...emptyData,
-      spotlightAnimes,
-      trendingAnimes: mapped,
-      latestEpisodeAnimes: mapped,
-      topUpcomingAnimes,
-      top10Animes: {
-        today: mapped.slice(0, 10),
-        week: mapped.slice(0, 10),
-        month: mapped.slice(0, 10),
-      },
-      topAiringAnimes: mapped,
-      mostPopularAnimes: mapped,
-      mostFavoriteAnimes: mapped,
-      latestCompletedAnimes: mapped,
-    };
+  const data: IAnimeData = {
+    ...emptyData,
+    spotlightAnimes,
+    trendingAnimes: mapped,
+    latestEpisodeAnimes: mapped,
+    topUpcomingAnimes,
+    top10Animes: {
+      today: mapped.slice(0, 10),
+      week: mapped.slice(0, 10),
+      month: mapped.slice(0, 10),
+    },
+    topAiringAnimes: mapped,
+    mostPopularAnimes: mapped,
+    mostFavoriteAnimes: mapped,
+    latestCompletedAnimes: mapped,
+  };
 
-    return data;
-  } catch (error) {
-    console.error("Failed to load home page data", error);
-    return emptyData;
-  }
+  return data;
 };
 
 export const useGetHomePageData = (

@@ -15,35 +15,30 @@ type BackendEpisode = {
 };
 
 const getAllEpisodes = async (animeId: string) => {
-  try {
-    const releasesRes = await api.get<BackendRelease[]>("/releases", {
-      params: { limit: 100, offset: 0 },
-    });
-    const release = (releasesRes.data || []).find(
-      (item) => item.anime_id === animeId,
-    );
+  const releasesRes = await api.get<BackendRelease[]>("/releases", {
+    params: { limit: 100, offset: 0 },
+  });
+  const release = (releasesRes.data || []).find(
+    (item) => item.anime_id === animeId,
+  );
 
-    if (!release) {
-      return { totalEpisodes: 0, episodes: [] } as IEpisodes;
-    }
-
-    const res = await api.get<BackendEpisode[]>("/episodes", {
-      params: { release_id: release.id },
-    });
-
-    const episodes =
-      (res.data || []).map((episode) => ({
-        title: episode.title || `Episode ${episode.number}`,
-        episodeId: episode.id,
-        number: episode.number,
-        isFiller: false,
-      })) || [];
-
-    return { totalEpisodes: episodes.length, episodes } as IEpisodes;
-  } catch (error) {
-    console.error("Failed to fetch episodes", error);
+  if (!release) {
     return { totalEpisodes: 0, episodes: [] } as IEpisodes;
   }
+
+  const res = await api.get<BackendEpisode[]>("/episodes", {
+    params: { release_id: release.id },
+  });
+
+  const episodes =
+    (res.data || []).map((episode) => ({
+      title: episode.title || `Episode ${episode.number}`,
+      episodeId: episode.id,
+      number: episode.number,
+      isFiller: false,
+    })) || [];
+
+  return { totalEpisodes: episodes.length, episodes } as IEpisodes;
 };
 
 export const useGetAllEpisodes = (animeId: string) => {
