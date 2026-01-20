@@ -3,12 +3,17 @@ import { IEpisodeSource } from "@/types/episodes";
 import { useQuery } from "react-query";
 import { api } from "@/lib/api";
 import { assertExternalApiShape, assertFieldExists } from "@/lib/contract-guards";
+import { withRetryAndFallback, EXTERNAL_API_POLICY } from "@/lib/api-retry";
+import { ApiContractError, normalizeToApiError } from "@/lib/api-errors";
 
 const getEpisodeData = async (
   episodeId: string,
   server: string | undefined,
   subOrDub: string,
 ) => {
+  const endpoint = "/api/episode/sources";
+  
+  // Fallback for external API when retries exhausted
   const fallback: IEpisodeSource = {
     headers: { Referer: "" },
     tracks: [],
@@ -21,20 +26,32 @@ const getEpisodeData = async (
 
   if (!episodeId) return fallback;
 
-  const res = await api.get("/api/episode/sources", {
-    params: {
-      animeEpisodeId: decodeURIComponent(episodeId),
-      server: server,
-      category: subOrDub,
+  return withRetryAndFallback(
+    async () => {
+      try {
+        const res = await api.get(endpoint, {
+          params: {
+            animeEpisodeId: decodeURIComponent(episodeId),
+            server: server,
+            category: subOrDub,
+          },
+          timeout: 10000,
+        });
+        
+        // External API - proxy/third-party, schema not guaranteed
+        assertExternalApiShape(res.data, endpoint);
+        assertFieldExists(res.data, 'data', endpoint);
+        
+        return res.data.data as IEpisodeSource;
+      } catch (error) {
+        // Map ContractError to ApiContractError
+        throw normalizeToApiError(error, endpoint);
+      }
     },
-    timeout: 10000,
-  });
-  
-  // External API - proxy/third-party, schema not guaranteed
-  assertExternalApiShape(res.data, "GET /api/episode/sources");
-  assertFieldExists(res.data, 'data', "GET /api/episode/sources");
-  
-  return res.data.data as IEpisodeSource;
+    EXTERNAL_API_POLICY,
+    endpoint,
+    fallback
+  );
 };
 
 export const useGetEpisodeData = (
@@ -49,5 +66,9 @@ export const useGetEpisodeData = (
     staleTime: 1000 * 60 * 3,
     enabled: Boolean(episodeId) && server !== "",
     retry: false,
+    useErrorBoundary: (error) => {
+      // Only use error boundary for contract errors
+      return error instanceof ApiContractError;
+    },
   });
 };

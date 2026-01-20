@@ -5,32 +5,46 @@ import { useQuery } from "react-query";
 import { normalizeSearchParams } from "./search-normalize";
 import { mapAnimeArrayToIAnimeArray } from "@/mappers/anime.mapper";
 import { assertInternalArrayResponse } from "@/lib/contract-guards";
+import { withRetry, INTERNAL_API_POLICY } from "@/lib/api-retry";
+import { ApiContractError, normalizeToApiError } from "@/lib/api-errors";
 
 const searchAnime = async (params: SearchAnimeParams) => {
+  const endpoint = "/search/anime";
   const limit = 20;
   const currentPage = params.page || 1;
   const offset = (currentPage - 1) * limit;
 
-  const res = await api.get("/search/anime", {
-    params: { q: params.q, limit, offset },
-  });
+  return withRetry(
+    async () => {
+      try {
+        const res = await api.get(endpoint, {
+          params: { q: params.q, limit, offset },
+        });
 
-  // Internal API - Kitsu backend contract guaranteed
-  assertInternalArrayResponse(res.data, "GET /search/anime");
-  const animes = mapAnimeArrayToIAnimeArray(res.data);
+        // Internal API - Kitsu backend contract guaranteed
+        assertInternalArrayResponse(res.data, endpoint);
+        const animes = mapAnimeArrayToIAnimeArray(res.data);
 
-  const hasNextPage = animes.length === limit;
-  const estimatedTotal =
-    animes.length === 0 || animes.length < limit
-      ? currentPage
-      : currentPage + 1;
+        const hasNextPage = animes.length === limit;
+        const estimatedTotal =
+          animes.length === 0 || animes.length < limit
+            ? currentPage
+            : currentPage + 1;
 
-  return {
-    animes,
-    totalPages: estimatedTotal,
-    hasNextPage,
-    currentPage,
-  };
+        return {
+          animes,
+          totalPages: estimatedTotal,
+          hasNextPage,
+          currentPage,
+        };
+      } catch (error) {
+        // Map ContractError to ApiContractError
+        throw normalizeToApiError(error, endpoint);
+      }
+    },
+    INTERNAL_API_POLICY,
+    endpoint
+  );
 };
 
 export const useGetSearchAnimeResults = (params: SearchAnimeParams) => {
@@ -43,5 +57,9 @@ export const useGetSearchAnimeResults = (params: SearchAnimeParams) => {
     staleTime: 1000 * 60 * 2,
     refetchOnWindowFocus: false,
     retry: false,
+    useErrorBoundary: (error) => {
+      // Use error boundary for contract errors and all internal API errors
+      return error instanceof ApiContractError || (error instanceof Error && !(error as Error & { source?: string }).source);
+    },
   });
 };
