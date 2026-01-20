@@ -52,7 +52,9 @@ async def add_favorite(
     await session.execute(stmt)
     favorite = await get_favorite(session, user_id, anime_id)
     if favorite is None:
-        raise RuntimeError("Favorite upsert did not return a row")
+        raise RuntimeError(
+            f"Favorite upsert did not return a row for user={user_id} anime={anime_id}"
+        )
     return favorite
 
 

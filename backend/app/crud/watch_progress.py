@@ -74,7 +74,9 @@ async def create_watch_progress(
     await session.execute(stmt)
     progress = await get_watch_progress(session, user_id, anime_id)
     if progress is None:
-        raise RuntimeError("Watch progress upsert did not return a row")
+        raise RuntimeError(
+            f"Watch progress upsert did not return a row for user={user_id} anime={anime_id}"
+        )
     return progress
 
 
