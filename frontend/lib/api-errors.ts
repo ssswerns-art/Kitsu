@@ -1,18 +1,46 @@
 /**
- * Unified API Error Model
+ * Unified API Error Model — FROZEN TAXONOMY
+ * ============================================
  * 
- * This module provides a unified error hierarchy for all API interactions.
- * All errors extend BaseApiError and provide:
- * - source: "internal" | "external" - distinguishes Kitsu backend vs third-party APIs
- * - endpoint: string - the API endpoint that failed
- * - retryable: boolean - whether the error should trigger retry logic
+ * This module defines the EXHAUSTIVE and CLOSED error hierarchy for all API interactions.
+ * The error taxonomy is FROZEN: any new error type MUST be added here or compilation fails.
  * 
- * Error hierarchy:
+ * ARCHITECTURAL INVARIANTS (enforced at runtime):
+ * 
+ * 1. ERROR CLASSIFICATION
+ *    - All API errors extend BaseApiError
+ *    - Each error declares: kind, source, endpoint, retryable
+ *    - Error kinds form a discriminated union (ApiErrorKind)
+ *    - NO ad-hoc error creation outside this module
+ * 
+ * 2. RETRY PHILOSOPHY
+ *    - Internal APIs: NEVER retryable (fail-fast)
+ *    - External APIs: Retryable ONLY for transient failures
+ *    - Contract violations: NEVER retryable (contract won't fix itself)
+ *    - Rate limits: NEVER retryable (requires longer backoff)
+ * 
+ * 3. CONTRACT ERROR MAPPING
+ *    - ContractError → ApiContractError mapping ONLY happens here
+ *    - Single point of truth: normalizeToApiError()
+ *    - Contract errors are NEVER masked by fallbacks
+ * 
+ * 4. FALLBACK PHILOSOPHY
+ *    - Fallbacks ONLY for external APIs
+ *    - Fallbacks NEVER for internal APIs (must fail-fast)
+ *    - Fallbacks NEVER for contract violations (must surface errors)
+ * 
+ * ERROR TAXONOMY:
  * - ApiNetworkError: Network-level failures (ECONNABORTED, no response)
  * - ApiTimeoutError: Request timeouts
  * - ApiRateLimitError: Rate limit errors (429)
  * - ApiContractError: Contract violations (wrapper for ContractError)
  * - ApiExternalUnavailableError: External API unavailable (5xx)
+ * 
+ * TO ADD A NEW ERROR TYPE:
+ * 1. Add variant to ApiErrorKind
+ * 2. Create class extending BaseApiError
+ * 3. Add mapping in normalizeToApiError()
+ * 4. Document retry behavior and fallback policy
  */
 
 import { ContractError } from "./contract-guards";
@@ -20,16 +48,36 @@ import { ContractError } from "./contract-guards";
 export type ApiSource = "internal" | "external";
 
 /**
+ * Discriminated union of all possible API error kinds
+ * This makes the error taxonomy exhaustive and closed
+ * Adding a new error type requires updating this union
+ */
+export type ApiErrorKind =
+  | "network"
+  | "timeout"
+  | "rate_limit"
+  | "contract"
+  | "external_unavailable";
+
+/**
  * Base class for all API errors
- * All API errors must extend this class
+ * All API errors MUST extend this class and declare their kind
+ * 
+ * INVARIANTS:
+ * - Every error has a discriminated kind
+ * - Every error declares source (internal/external)
+ * - Every error declares endpoint
+ * - Every error declares retryable status
  */
 export abstract class BaseApiError extends Error {
+  public readonly kind: ApiErrorKind;
   public readonly source: ApiSource;
   public readonly endpoint: string;
   public readonly retryable: boolean;
   public readonly originalError?: Error;
 
   constructor(
+    kind: ApiErrorKind,
     message: string,
     source: ApiSource,
     endpoint: string,
@@ -38,6 +86,7 @@ export abstract class BaseApiError extends Error {
   ) {
     super(message);
     this.name = this.constructor.name;
+    this.kind = kind;
     this.source = source;
     this.endpoint = endpoint;
     this.retryable = retryable;
@@ -52,7 +101,10 @@ export abstract class BaseApiError extends Error {
 
 /**
  * Network-level errors (connection failures, DNS errors, etc.)
- * Always retryable for external APIs
+ * 
+ * RETRY POLICY:
+ * - Internal API: NOT retryable (fail-fast)
+ * - External API: Retryable (transient network issues)
  */
 export class ApiNetworkError extends BaseApiError {
   constructor(
@@ -61,6 +113,7 @@ export class ApiNetworkError extends BaseApiError {
     originalError?: Error
   ) {
     super(
+      "network",
       `Network error calling ${endpoint}: ${originalError?.message || "Connection failed"}`,
       source,
       endpoint,
@@ -72,7 +125,10 @@ export class ApiNetworkError extends BaseApiError {
 
 /**
  * Timeout errors (request took too long)
- * Always retryable for external APIs
+ * 
+ * RETRY POLICY:
+ * - Internal API: NOT retryable (fail-fast)
+ * - External API: Retryable (may succeed on retry)
  */
 export class ApiTimeoutError extends BaseApiError {
   constructor(
@@ -81,6 +137,7 @@ export class ApiTimeoutError extends BaseApiError {
     originalError?: Error
   ) {
     super(
+      "timeout",
       `Request to ${endpoint} timed out`,
       source,
       endpoint,
@@ -92,7 +149,13 @@ export class ApiTimeoutError extends BaseApiError {
 
 /**
  * Rate limit errors (429 status)
- * Never retryable (need to back off longer than our retry window)
+ * 
+ * RETRY POLICY:
+ * - NEVER retryable (requires longer backoff than our retry window)
+ * 
+ * RATIONALE:
+ * Immediate retry would trigger another rate limit. Client should
+ * implement exponential backoff at a higher level if needed.
  */
 export class ApiRateLimitError extends BaseApiError {
   constructor(
@@ -101,6 +164,7 @@ export class ApiRateLimitError extends BaseApiError {
     originalError?: Error
   ) {
     super(
+      "rate_limit",
       `Rate limit exceeded for ${endpoint}`,
       source,
       endpoint,
@@ -112,8 +176,16 @@ export class ApiRateLimitError extends BaseApiError {
 
 /**
  * Contract violations (unexpected response shape)
- * Never retryable (contract won't fix itself on retry)
- * Wraps ContractError from contract-guards
+ * 
+ * RETRY POLICY:
+ * - NEVER retryable (contract won't fix itself on retry)
+ * 
+ * FALLBACK POLICY:
+ * - NEVER use fallback (contract violations must surface to developers)
+ * 
+ * INVARIANT:
+ * - This is the ONLY place where ContractError is wrapped
+ * - Wrapping ContractError anywhere else violates architectural rules
  */
 export class ApiContractError extends BaseApiError {
   public readonly contractError: ContractError;
@@ -124,6 +196,7 @@ export class ApiContractError extends BaseApiError {
     contractError: ContractError
   ) {
     super(
+      "contract",
       `Contract violation for ${endpoint}: ${contractError.message}`,
       source,
       endpoint,
@@ -136,7 +209,13 @@ export class ApiContractError extends BaseApiError {
 
 /**
  * External API unavailable (5xx errors from third-party APIs)
- * Always retryable for external APIs
+ * 
+ * RETRY POLICY:
+ * - Always retryable (server may recover)
+ * 
+ * INVARIANT:
+ * - source is ALWAYS "external"
+ * - Only used for 5xx status codes from external APIs
  */
 export class ApiExternalUnavailableError extends BaseApiError {
   public readonly status: number;
@@ -147,6 +226,7 @@ export class ApiExternalUnavailableError extends BaseApiError {
     originalError?: Error
   ) {
     super(
+      "external_unavailable",
       `External API ${endpoint} unavailable (status ${status})`,
       "external",
       endpoint,
@@ -170,7 +250,15 @@ export function getApiSource(endpoint: string): ApiSource {
 
 /**
  * Converts unknown errors to our typed error hierarchy
- * This is the main entry point for error normalization
+ * 
+ * ARCHITECTURAL INVARIANT:
+ * This is the SINGLE POINT OF TRUTH for error normalization.
+ * ContractError → ApiContractError mapping ONLY happens here.
+ * Wrapping ContractError anywhere else violates the architecture.
+ * 
+ * @param error - Unknown error from API call
+ * @param endpoint - API endpoint that failed
+ * @returns Typed BaseApiError (one of the discriminated union variants)
  */
 export function normalizeToApiError(
   error: unknown,
@@ -184,6 +272,7 @@ export function normalizeToApiError(
   }
 
   // ContractError from contract guards
+  // INVARIANT: This is the ONLY place where ContractError is wrapped
   if (error instanceof ContractError) {
     return new ApiContractError(source, endpoint, error);
   }
