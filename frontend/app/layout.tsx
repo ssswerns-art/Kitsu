@@ -7,6 +7,7 @@ import Footer from "@/components/footer";
 import Script from "next/script";
 import QueryProvider from "@/providers/query-provider";
 import { PublicEnvScript } from "next-runtime-env";
+import { HydrationTimestampProvider } from "@/providers/hydration-timestamp-provider";
 
 import { ThemeProvider } from "@/components/theme-provider";
 
@@ -59,6 +60,7 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const hydrationTimestamp = new Date().toISOString();
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -80,21 +82,23 @@ export default function RootLayout({
       <body
         className={`${geistSans.className} antialiased max-w-[100vw] overflow-x-hidden`}
       >
-        <StoreProvider>
-          <ThemeProvider
-            attribute="class"
-            defaultTheme="dark"
-            enableSystem
-            disableTransitionOnChange
-          >
-            <QueryProvider>
-              <NavBar />
-              {children}
-              <Footer />
-            </QueryProvider>
-          </ThemeProvider>
-          <Toaster />
-        </StoreProvider>
+        <HydrationTimestampProvider initialTimestamp={hydrationTimestamp}>
+          <StoreProvider>
+            <ThemeProvider
+              attribute="class"
+              defaultTheme="dark"
+              enableSystem
+              disableTransitionOnChange
+            >
+              <QueryProvider>
+                <NavBar />
+                {children}
+                <Footer />
+              </QueryProvider>
+            </ThemeProvider>
+            <Toaster />
+          </StoreProvider>
+        </HydrationTimestampProvider>
       </body>
     </html>
   );

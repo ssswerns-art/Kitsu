@@ -7,13 +7,27 @@ import { useGetAnimeSchedule } from "@/query/get-anime-schedule";
 import Button from "./common/custom-button";
 import Link from "next/link";
 import { ROUTES } from "@/constants/routes";
+import { useHydrationTimestamp } from "@/providers/hydration-timestamp-provider";
 
 function AnimeSchedule() {
-  const currentDate = new Date();
-  const currentDay = currentDate
-    .toLocaleString("en-US", { weekday: "long" })
-    .toLowerCase();
-  const currentDayIndex = currentDate.getDay();
+  const hydrationTimestamp = useHydrationTimestamp();
+  const [hasHydrated, setHasHydrated] = React.useState(false);
+  const [currentDate, setCurrentDate] = React.useState(
+    () => new Date(hydrationTimestamp ?? new Date().toISOString()),
+  );
+  const useUtc = !hasHydrated;
+  const currentDay = useMemo(() => {
+    return currentDate
+      .toLocaleString("en-US", {
+        weekday: "long",
+        ...(useUtc ? { timeZone: "UTC" } : {}),
+      })
+      .toLowerCase();
+  }, [currentDate, useUtc]);
+  const currentDayIndex = useMemo(
+    () => (useUtc ? currentDate.getUTCDay() : currentDate.getDay()),
+    [currentDate, useUtc],
+  );
   const daysOfWeek = [
     "sunday",
     "monday",
@@ -25,23 +39,42 @@ function AnimeSchedule() {
   ];
   const [currentSelectedTab, setCurrentSelectedTab] =
     React.useState<string>(currentDay);
+  const initialDayRef = React.useRef(currentDay);
 
   const defaultTab = daysOfWeek.includes(currentDay) ? currentDay : "monday";
 
   const selectedDate = useMemo(() => {
     const date = getDateForWeekday(currentSelectedTab);
-    date.setDate(date.getDate() + 1); // idk why i had to add 1 day, but the schedule API returns the next day
-    return date.toLocaleDateString("en-US");
-  }, [currentSelectedTab, getDateForWeekday]);
+    if (useUtc) {
+      date.setUTCDate(date.getUTCDate() + 1);
+    } else {
+      date.setDate(date.getDate() + 1);
+    }
+    return date.toLocaleDateString("en-US", {
+      ...(useUtc ? { timeZone: "UTC" } : {}),
+    });
+  }, [currentSelectedTab, getDateForWeekday, useUtc]);
 
   const [shouldLoadSchedule, setShouldLoadSchedule] =
     React.useState(false);
+
+  React.useEffect(() => {
+    setHasHydrated(true);
+    setCurrentDate(new Date());
+  }, []);
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
     const id = window.requestAnimationFrame(() => setShouldLoadSchedule(true));
     return () => window.cancelAnimationFrame(id);
   }, []);
+
+  React.useEffect(() => {
+    if (!hasHydrated) return;
+    setCurrentSelectedTab((prev) =>
+      prev === initialDayRef.current ? currentDay : prev,
+    );
+  }, [currentDay, hasHydrated]);
 
   const { isLoading, data } = useGetAnimeSchedule(selectedDate, {
     enabled: shouldLoadSchedule,
@@ -51,7 +84,11 @@ function AnimeSchedule() {
     const targetIndex = daysOfWeek.indexOf(targetDay);
     const date = new Date(currentDate);
     const diff = targetIndex - currentDayIndex;
-    date.setDate(currentDate.getDate() + diff);
+    if (useUtc) {
+      date.setUTCDate(currentDate.getUTCDate() + diff);
+    } else {
+      date.setDate(currentDate.getDate() + diff);
+    }
     return date;
   }
 
@@ -72,6 +109,7 @@ function AnimeSchedule() {
               {getDateForWeekday(day).toLocaleDateString("en-US", {
                 month: "short",
                 day: "numeric",
+                ...(useUtc ? { timeZone: "UTC" } : {}),
               })}
             </TabsTrigger>
           ))}
