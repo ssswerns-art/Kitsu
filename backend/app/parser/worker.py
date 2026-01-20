@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..database import AsyncSessionLocal
 from ..services.audit.audit_service import AuditService
 from .config import ParserSettings
+from .scheduler import ParserScheduler, get_sources_needing_catalog_sync
 from .services.autoupdate_service import ParserEpisodeAutoupdateService
 from .services.sync_service import ParserSyncService, get_parser_settings
 from .sources.kodik_episode import KodikEpisodeSource
@@ -132,36 +133,38 @@ class ParserWorker:
                 logger.debug("Mode is not 'auto', sleeping")
                 return
             
-            # Get active sources
-            sources = await self._get_active_sources(session)
+            # Create scheduler
+            scheduler = ParserScheduler(settings)
             
-            if not sources:
-                logger.debug("No active sources, sleeping")
-                return
+            # Get sources that need catalog sync based on schedule
+            sources_needing_sync = await get_sources_needing_catalog_sync(session, scheduler)
             
-            logger.info(
-                "Queuing parser tasks",
-                extra={
-                    "active_sources": [s["code"] for s in sources],
-                    "autoupdate_enabled": settings.enable_autoupdate,
-                }
-            )
+            if sources_needing_sync:
+                logger.info(
+                    "Queuing catalog sync tasks",
+                    extra={
+                        "sources": [s["code"] for s in sources_needing_sync],
+                    }
+                )
+                
+                for source in sources_needing_sync:
+                    await self._queue_catalog_sync(session, settings, source)
             
-            # Queue catalog sync if shikimori is enabled
-            shikimori_source = next((s for s in sources if s["code"] == "shikimori"), None)
-            if shikimori_source:
-                await self._queue_catalog_sync(session, settings, shikimori_source)
-            
-            # Queue episode autoupdate if enabled
-            if settings.enable_autoupdate:
-                kodik_source = next((s for s in sources if s["code"] == "kodik"), None)
-                if kodik_source and shikimori_source:
+            # Queue episode autoupdate if enabled and scheduled
+            if scheduler.should_run_episode_sync():
+                shikimori_source = await self._get_source_by_code(session, "shikimori")
+                kodik_source = await self._get_source_by_code(session, "kodik")
+                
+                if shikimori_source and kodik_source:
+                    logger.info("Queuing episode autoupdate task")
                     await self._queue_episode_autoupdate(
                         session, settings, shikimori_source, kodik_source
                     )
     
-    async def _get_active_sources(self, session: AsyncSession) -> list[dict[str, Any]]:
-        """Get all enabled parser sources."""
+    async def _get_source_by_code(
+        self, session: AsyncSession, code: str
+    ) -> dict[str, Any] | None:
+        """Get a specific parser source by code."""
         result = await session.execute(
             select(
                 parser_sources.c.id,
@@ -169,9 +172,12 @@ class ParserWorker:
                 parser_sources.c.enabled,
                 parser_sources.c.rate_limit_per_min,
                 parser_sources.c.max_concurrency,
-            ).where(parser_sources.c.enabled == True)  # noqa: E712
+            )
+            .where(parser_sources.c.code == code)
+            .where(parser_sources.c.enabled == True)  # noqa: E712
         )
-        return [dict(row._mapping) for row in result]
+        row = result.first()
+        return dict(row._mapping) if row else None
     
     async def _queue_catalog_sync(
         self,
