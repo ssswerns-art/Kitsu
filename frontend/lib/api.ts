@@ -30,9 +30,7 @@ type RefreshTokensResponse = { accessToken: string; refreshToken: string };
 
 type RetriableRequestConfig = InternalAxiosRequestConfig & { _retry?: boolean };
 
-const getIsServer = () => typeof document === "undefined";
-
-const createApiClient = (): AxiosInstance => {
+export const createApiClient = (): AxiosInstance => {
   const apiClient = axios.create({
     baseURL,
     timeout: 10000,
@@ -146,25 +144,15 @@ const createApiClient = (): AxiosInstance => {
 
 let clientApi: AxiosInstance | null = null;
 
-const getApiClient = (): AxiosInstance => {
-  if (getIsServer()) {
-    return createApiClient();
-  }
+export const getClientApi = (): AxiosInstance => {
   if (!clientApi) {
     clientApi = createApiClient();
   }
   return clientApi;
 };
 
-export const api: AxiosInstance = new Proxy({} as AxiosInstance, {
-  get: (_target, prop) => {
-    const client = getApiClient();
-    const value = Reflect.get(client, prop);
-    if (typeof value === "function") {
-      return value.bind(client);
-    }
-    return value;
-  },
-});
+export const getServerApi = (): AxiosInstance => createApiClient();
+
+export const api = getClientApi();
 
 export { setAuthFailureHandler };
