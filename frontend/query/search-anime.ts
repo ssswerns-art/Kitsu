@@ -3,15 +3,14 @@ import { api } from "@/lib/api";
 import { ISuggestionAnime } from "@/types/anime";
 import { useQuery } from "react-query";
 import { normalizeSearchQuery } from "./search-normalize";
-import { BackendAnime } from "@/mappers/common";
-import { mapBackendAnimeToSuggestionAnime } from "@/mappers/anime.mapper";
+import { mapAnimeArrayToSuggestionAnimeArray } from "@/mappers/anime.mapper";
 import { assertInternalArrayResponse } from "@/lib/contract-guards";
 
 const searchAnime = async (q: string) => {
   if (q === "") {
     return;
   }
-  const res = await api.get<BackendAnime[]>("/search/anime", {
+  const res = await api.get("/search/anime", {
     params: {
       q,
       limit: 5,
@@ -21,7 +20,7 @@ const searchAnime = async (q: string) => {
 
   // Internal API - Kitsu backend contract guaranteed
   assertInternalArrayResponse(res.data, "GET /search/anime");
-  return (res.data as BackendAnime[]).map(mapBackendAnimeToSuggestionAnime);
+  return mapAnimeArrayToSuggestionAnimeArray(res.data);
 };
 
 export const useSearchAnime = (query: string) => {

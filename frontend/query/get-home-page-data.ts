@@ -2,11 +2,10 @@ import { queryKeys } from "@/constants/query-keys";
 import { api } from "@/lib/api";
 import { IAnimeData, SpotlightAnime, TopUpcomingAnime } from "@/types/anime";
 import { QueryFunction, UseQueryOptions, useQuery } from "react-query";
-import { BackendAnime } from "@/mappers/common";
 import { 
-  mapBackendAnimeToIAnime,
-  mapBackendAnimeToSpotlightAnime,
-  mapBackendAnimeToTopUpcomingAnime
+  mapAnimeArrayToIAnimeArray,
+  mapAnimeArrayToSpotlightAnimeArray,
+  mapAnimeArrayToTopUpcomingAnimeArray
 } from "@/mappers/anime.mapper";
 import { assertInternalArrayResponse } from "@/lib/contract-guards";
 
@@ -31,21 +30,18 @@ const getHomePageData: QueryFunction<
     genres: [],
   };
 
-  const res = await api.get<BackendAnime[]>("/anime", {
+  const res = await api.get("/anime", {
     params: { limit: 20, offset: 0 },
   });
   
   // Internal API - Kitsu backend contract guaranteed
   assertInternalArrayResponse(res.data, "GET /anime");
   
-  const mapped = res.data.map(mapBackendAnimeToIAnime);
+  const mapped = mapAnimeArrayToIAnimeArray(res.data);
   
-  const spotlightAnimes: SpotlightAnime[] = res.data
-    .slice(0, 5)
-    .map((anime, idx) => mapBackendAnimeToSpotlightAnime(anime, idx + 1));
+  const spotlightAnimes: SpotlightAnime[] = mapAnimeArrayToSpotlightAnimeArray(res.data.slice(0, 5));
   
-  const topUpcomingAnimes: TopUpcomingAnime[] = res.data
-    .map(mapBackendAnimeToTopUpcomingAnime);
+  const topUpcomingAnimes: TopUpcomingAnime[] = mapAnimeArrayToTopUpcomingAnimeArray(res.data);
 
   const data: IAnimeData = {
     ...emptyData,

@@ -7,8 +7,45 @@ import {
 } from "@/types/anime";
 import { Season } from "@/types/anime-details";
 import { PLACEHOLDER_POSTER } from "@/utils/constants";
-import { BackendAnime, BackendRelease } from "./common";
-import { assertString, assertOptional } from "@/lib/contract-guards";
+import { assertString, assertOptional, assertArray } from "@/lib/contract-guards";
+
+/**
+ * Backend DTO Types (INTERNAL - NOT EXPORTED)
+ * These represent the actual API response structure from backend (snake_case)
+ * 
+ * ⚠️ CRITICAL: These types are private implementation details of this mapper.
+ * They MUST NOT be exported or used outside this file.
+ * Query layer works only with Domain Models (IAnime, Season, etc.)
+ */
+
+type BackendAnime = {
+  id: string;
+  title: string;
+  title_original?: string | null;
+  description?: string | null;
+  year?: number | null;
+  status?: string | null;
+};
+
+type BackendRelease = {
+  id: string;
+  anime_id: string;
+  title: string;
+  year?: number | null;
+  status?: string | null;
+};
+
+/**
+ * Type guards - internal helpers for safe casting from unknown
+ */
+
+function isBackendAnime(data: unknown): data is BackendAnime {
+  return typeof data === 'object' && data !== null && 'id' in data && 'title' in data;
+}
+
+function isBackendRelease(data: unknown): data is BackendRelease {
+  return typeof data === 'object' && data !== null && 'id' in data && 'anime_id' in data;
+}
 
 /**
  * Maps backend status string to frontend Type enum
@@ -57,6 +94,20 @@ export function mapBackendAnimeToIAnime(dto: BackendAnime): IAnime {
 }
 
 /**
+ * Maps array of unknown data to IAnime array
+ * This is the ONLY function that query layer should use for mapping anime arrays
+ */
+export function mapAnimeArrayToIAnimeArray(data: unknown): IAnime[] {
+  assertArray(data, "AnimeArray");
+  return data.map((item) => {
+    if (!isBackendAnime(item)) {
+      throw new Error("Invalid anime data in array");
+    }
+    return mapBackendAnimeToIAnime(item);
+  });
+}
+
+/**
  * Maps BackendAnime to ISuggestionAnime
  * PURE function - no fallbacks, no optional chaining
  */
@@ -76,6 +127,19 @@ export function mapBackendAnimeToSuggestionAnime(dto: BackendAnime): ISuggestion
     rank: undefined,
     moreInfo: [],
   };
+}
+
+/**
+ * Maps array of unknown data to ISuggestionAnime array
+ */
+export function mapAnimeArrayToSuggestionAnimeArray(data: unknown): ISuggestionAnime[] {
+  assertArray(data, "AnimeArray");
+  return data.map((item) => {
+    if (!isBackendAnime(item)) {
+      throw new Error("Invalid anime data in array");
+    }
+    return mapBackendAnimeToSuggestionAnime(item);
+  });
 }
 
 /**
@@ -108,6 +172,19 @@ export function mapBackendAnimeToSpotlightAnime(dto: BackendAnime, rank: number)
 }
 
 /**
+ * Maps array of unknown data to SpotlightAnime array
+ */
+export function mapAnimeArrayToSpotlightAnimeArray(data: unknown): SpotlightAnime[] {
+  assertArray(data, "AnimeArray");
+  return data.map((item, idx) => {
+    if (!isBackendAnime(item)) {
+      throw new Error("Invalid anime data in array");
+    }
+    return mapBackendAnimeToSpotlightAnime(item, idx + 1);
+  });
+}
+
+/**
  * Maps BackendAnime to TopUpcomingAnime
  * PURE function - no fallbacks, no optional chaining
  * TopUpcomingAnime.type is string, so we convert Type enum to string
@@ -136,6 +213,19 @@ export function mapBackendAnimeToTopUpcomingAnime(dto: BackendAnime): TopUpcomin
 }
 
 /**
+ * Maps array of unknown data to TopUpcomingAnime array
+ */
+export function mapAnimeArrayToTopUpcomingAnimeArray(data: unknown): TopUpcomingAnime[] {
+  assertArray(data, "AnimeArray");
+  return data.map((item) => {
+    if (!isBackendAnime(item)) {
+      throw new Error("Invalid anime data in array");
+    }
+    return mapBackendAnimeToTopUpcomingAnime(item);
+  });
+}
+
+/**
  * Maps BackendRelease to Season
  * PURE function - no fallbacks, no optional chaining
  */
@@ -150,4 +240,28 @@ export function mapBackendReleaseToSeason(dto: BackendRelease, isCurrent: boolea
     poster: PLACEHOLDER_POSTER,
     isCurrent,
   };
+}
+
+/**
+ * Maps unknown data to Season
+ * This is the ONLY function that query layer should use for mapping single release
+ */
+export function mapReleaseToSeason(data: unknown, isCurrent: boolean): Season {
+  if (!isBackendRelease(data)) {
+    throw new Error("Invalid release data");
+  }
+  return mapBackendReleaseToSeason(data, isCurrent);
+}
+
+/**
+ * Maps array of unknown data to Season array
+ */
+export function mapReleaseArrayToSeasonArray(data: unknown): Season[] {
+  assertArray(data, "ReleaseArray");
+  return data.map((item, idx) => {
+    if (!isBackendRelease(item)) {
+      throw new Error("Invalid release data in array");
+    }
+    return mapBackendReleaseToSeason(item, idx === 0);
+  });
 }

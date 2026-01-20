@@ -3,9 +3,8 @@ import { api } from "@/lib/api";
 import { IAnimeDetails } from "@/types/anime-details";
 import { useQuery } from "react-query";
 import { PLACEHOLDER_POSTER } from "@/utils/constants";
-import { BackendAnime, BackendRelease } from "@/mappers/common";
-import { mapBackendReleaseToSeason } from "@/mappers/anime.mapper";
-import { assertInternalApiResponse, assertInternalArrayResponse, assertString, assertOptional, assertNumber } from "@/lib/contract-guards";
+import { mapReleaseArrayToSeasonArray } from "@/mappers/anime.mapper";
+import { assertInternalApiResponse, assertInternalArrayResponse, assertString, assertOptional, assertNumber, assertArray } from "@/lib/contract-guards";
 
 const getAnimeDetails = async (animeId: string) => {
   const emptyDetails: IAnimeDetails = {
@@ -47,24 +46,28 @@ const getAnimeDetails = async (animeId: string) => {
   };
 
   const [animeRes, releasesRes] = await Promise.all([
-    api.get<BackendAnime>(`/anime/${animeId}`),
-    api.get<BackendRelease[]>("/releases", { params: { limit: 100, offset: 0 } }),
+    api.get(`/anime/${animeId}`),
+    api.get("/releases", { params: { limit: 100, offset: 0 } }),
   ]);
 
   // Internal API - Kitsu backend contract guaranteed
   assertInternalApiResponse(animeRes.data, "GET /anime/:id");
-  const anime = animeRes.data as BackendAnime;
+  const anime = animeRes.data;
   
   assertString(anime.id, "Anime.id");
   assertString(anime.title, "Anime.title");
 
   // Internal API - Kitsu backend contract guaranteed
   assertInternalArrayResponse(releasesRes.data, "GET /releases");
-  const releases = (releasesRes.data as BackendRelease[]).filter((release) => release.anime_id === animeId);
+  assertArray(releasesRes.data, "GET /releases");
+  
+  // Filter releases for this anime
+  const filteredReleases = (releasesRes.data as unknown[]).filter((release: unknown) => {
+    if (typeof release !== 'object' || release === null) return false;
+    return (release as Record<string, unknown>).anime_id === animeId;
+  });
 
-  const seasons = releases.map((release, idx) => 
-    mapBackendReleaseToSeason(release, idx === 0)
-  );
+  const seasons = mapReleaseArrayToSeasonArray(filteredReleases);
 
   const description = assertOptional(anime.description, assertString, "Anime.description") ?? "";
   const titleOriginal = assertOptional(anime.title_original, assertString, "Anime.title_original") ?? anime.title;

@@ -1,27 +1,13 @@
 /**
- * Common Backend DTO Types
- * These represent the actual API response structure from backend (snake_case)
+ * ⚠️ DEPRECATED: This file is being phased out.
+ * 
+ * Backend DTO types have been moved directly into their respective mapper files
+ * to create a hard compile-time boundary. Backend types CANNOT be imported from
+ * this file or any other location outside the mapper that defines them.
+ * 
+ * This enforces the principle: Backend DTOs are implementation details of mappers,
+ * not public contracts.
  */
 
-export type BackendAnime = {
-  id: string;
-  title: string;
-  title_original?: string | null;
-  description?: string | null;
-  year?: number | null;
-  status?: string | null;
-};
-
-export type BackendRelease = {
-  id: string;
-  anime_id: string;
-  title: string;
-  year?: number | null;
-  status?: string | null;
-};
-
-export type BackendEpisode = {
-  id: string;
-  number: number;
-  title?: string | null;
-};
+// This file intentionally left empty to prevent accidental imports
+// Each mapper file now contains its own Backend DTO definitions

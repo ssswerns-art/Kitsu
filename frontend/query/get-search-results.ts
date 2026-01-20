@@ -3,8 +3,7 @@ import { api } from "@/lib/api";
 import { IAnimeSearch, SearchAnimeParams } from "@/types/anime";
 import { useQuery } from "react-query";
 import { normalizeSearchParams } from "./search-normalize";
-import { BackendAnime } from "@/mappers/common";
-import { mapBackendAnimeToIAnime } from "@/mappers/anime.mapper";
+import { mapAnimeArrayToIAnimeArray } from "@/mappers/anime.mapper";
 import { assertInternalArrayResponse } from "@/lib/contract-guards";
 
 const searchAnime = async (params: SearchAnimeParams) => {
@@ -12,13 +11,13 @@ const searchAnime = async (params: SearchAnimeParams) => {
   const currentPage = params.page || 1;
   const offset = (currentPage - 1) * limit;
 
-  const res = await api.get<BackendAnime[]>("/search/anime", {
+  const res = await api.get("/search/anime", {
     params: { q: params.q, limit, offset },
   });
 
   // Internal API - Kitsu backend contract guaranteed
   assertInternalArrayResponse(res.data, "GET /search/anime");
-  const animes = (res.data as BackendAnime[]).map(mapBackendAnimeToIAnime);
+  const animes = mapAnimeArrayToIAnimeArray(res.data);
 
   const hasNextPage = animes.length === limit;
   const estimatedTotal =
