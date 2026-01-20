@@ -179,19 +179,16 @@ def _log_error(request: Request, status_code: int, code: str, message: str, exc:
         logger.warning(log_message, exc_info=exc)
 
 
-def _is_canonical_error(detail: object) -> bool:
+def _extract_canonical_error(detail: object) -> dict[str, object] | None:
     if not isinstance(detail, dict):
-        return False
+        return None
     error = detail.get("error")
     if not isinstance(error, dict):
-        return False
-    return isinstance(error.get("code"), str) and isinstance(error.get("message"), str)
-
-
-def _normalize_canonical_error(detail: dict[str, object]) -> dict[str, object]:
-    error = detail.get("error", {})
-    if not isinstance(error, dict):
-        return detail
+        return None
+    if not isinstance(error.get("code"), str) or not isinstance(
+        error.get("message"), str
+    ):
+        return None
     if "details" not in error:
         return {"error": {**error, "details": None}}
     return detail
@@ -207,10 +204,12 @@ async def handle_app_error(request: Request, exc: AppError) -> JSONResponse:
 
 
 @app.exception_handler(HTTPException)
-async def handle_http_exception(request: Request, exc: HTTPException) -> JSONResponse:
-    if _is_canonical_error(exc.detail):
-        payload = _normalize_canonical_error(exc.detail)
-        error = payload.get("error", {})
+async def handle_http_exception(
+    request: Request, exc: HTTPException | StarletteHTTPException
+) -> JSONResponse:
+    payload = _extract_canonical_error(exc.detail)
+    if payload is not None:
+        error = payload["error"]
         code = error.get("code", resolve_error_code(exc.status_code))
         message = error.get("message", "")
         _log_error(request, exc.status_code, str(code), str(message))
@@ -315,10 +314,7 @@ async def handle_unhandled_exception(
 async def handle_starlette_http_exception(
     request: Request, exc: StarletteHTTPException
 ) -> JSONResponse:
-    return await handle_http_exception(
-        request,
-        HTTPException(status_code=exc.status_code, detail=exc.detail, headers=exc.headers),
-    )
+    return await handle_http_exception(request, exc)
 
 
 @app.get("/health", tags=["health"])
