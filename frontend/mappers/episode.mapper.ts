@@ -1,6 +1,28 @@
 import { Episode } from "@/types/episodes";
-import { BackendEpisode, isBackendEpisode } from "./common";
 import { assertString, assertNumber, assertOptional, assertArray } from "@/lib/contract-guards";
+
+/**
+ * Backend DTO Types (INTERNAL - NOT EXPORTED)
+ * These represent the actual API response structure from backend (snake_case)
+ * 
+ * ⚠️ CRITICAL: These types are private implementation details of this mapper.
+ * They MUST NOT be exported or used outside this file.
+ * Query layer works only with Domain Models (Episode, etc.)
+ */
+
+type BackendEpisode = {
+  id: string;
+  number: number;
+  title?: string | null;
+};
+
+/**
+ * Type guards - internal helpers for safe casting from unknown
+ */
+
+function isBackendEpisode(data: unknown): data is BackendEpisode {
+  return typeof data === 'object' && data !== null && 'id' in data && 'number' in data;
+}
 
 /**
  * Maps BackendEpisode to Episode

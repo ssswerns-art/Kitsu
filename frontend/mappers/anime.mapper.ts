@@ -7,8 +7,45 @@ import {
 } from "@/types/anime";
 import { Season } from "@/types/anime-details";
 import { PLACEHOLDER_POSTER } from "@/utils/constants";
-import { BackendAnime, BackendRelease, isBackendAnime, isBackendRelease } from "./common";
 import { assertString, assertOptional, assertArray } from "@/lib/contract-guards";
+
+/**
+ * Backend DTO Types (INTERNAL - NOT EXPORTED)
+ * These represent the actual API response structure from backend (snake_case)
+ * 
+ * ⚠️ CRITICAL: These types are private implementation details of this mapper.
+ * They MUST NOT be exported or used outside this file.
+ * Query layer works only with Domain Models (IAnime, Season, etc.)
+ */
+
+type BackendAnime = {
+  id: string;
+  title: string;
+  title_original?: string | null;
+  description?: string | null;
+  year?: number | null;
+  status?: string | null;
+};
+
+type BackendRelease = {
+  id: string;
+  anime_id: string;
+  title: string;
+  year?: number | null;
+  status?: string | null;
+};
+
+/**
+ * Type guards - internal helpers for safe casting from unknown
+ */
+
+function isBackendAnime(data: unknown): data is BackendAnime {
+  return typeof data === 'object' && data !== null && 'id' in data && 'title' in data;
+}
+
+function isBackendRelease(data: unknown): data is BackendRelease {
+  return typeof data === 'object' && data !== null && 'id' in data && 'anime_id' in data;
+}
 
 /**
  * Maps backend status string to frontend Type enum
