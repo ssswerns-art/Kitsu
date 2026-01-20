@@ -2,8 +2,9 @@
  * Common Backend DTO Types
  * These represent the actual API response structure from backend (snake_case)
  * 
- * IMPORTANT: These types are INTERNAL to the mapper layer and must NEVER be exported.
- * Query layer should only work with Domain Models from @/types/*
+ * IMPORTANT: These types are INTERNAL to the mapper layer and must NEVER be 
+ * imported or used outside of frontend/mappers/* directory.
+ * They are exported ONLY for use by other mapper files (anime.mapper.ts, episode.mapper.ts).
  */
 
 type BackendAnime = {

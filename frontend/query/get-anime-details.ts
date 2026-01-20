@@ -60,7 +60,12 @@ const getAnimeDetails = async (animeId: string) => {
   // Internal API - Kitsu backend contract guaranteed
   assertInternalArrayResponse(releasesRes.data, "GET /releases");
   assertArray(releasesRes.data, "GET /releases");
-  const filteredReleases = releasesRes.data.filter((release: any) => release.anime_id === animeId);
+  
+  // Filter releases for this anime
+  const filteredReleases = (releasesRes.data as unknown[]).filter((release: unknown) => {
+    if (typeof release !== 'object' || release === null) return false;
+    return (release as Record<string, unknown>).anime_id === animeId;
+  });
 
   const seasons = mapReleaseArrayToSeasonArray(filteredReleases);
 

@@ -12,8 +12,13 @@ const getAllEpisodes = async (animeId: string) => {
   
   // Internal API - Kitsu backend contract guaranteed
   assertInternalArrayResponse(releasesRes.data, "GET /releases");
-  const release = releasesRes.data.find(
-    (item: any) => item.anime_id === animeId,
+  
+  // Find release for this anime - filter works on validated array
+  const release = (releasesRes.data as unknown[]).find(
+    (item: unknown) => {
+      if (typeof item !== 'object' || item === null) return false;
+      return (item as Record<string, unknown>).anime_id === animeId;
+    }
   );
 
   if (!release) {
