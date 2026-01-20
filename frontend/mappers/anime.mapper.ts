@@ -8,6 +8,7 @@ import {
 import { Season } from "@/types/anime-details";
 import { PLACEHOLDER_POSTER } from "@/utils/constants";
 import { BackendAnime, BackendRelease } from "./common";
+import { assertString, assertOptional } from "@/lib/contract-guards";
 
 /**
  * Maps backend status string to frontend Type enum
@@ -39,13 +40,15 @@ export function mapStatusToType(status?: string | null): Type | undefined {
  * Throws for required fields only
  */
 export function mapBackendAnimeToIAnime(dto: BackendAnime): IAnime {
-  if (!dto.id) throw new Error("Anime.id is required");
-  if (!dto.title) throw new Error("Anime.title is required");
+  assertString(dto.id, "Anime.id");
+  assertString(dto.title, "Anime.title");
+
+  const titleOriginal = assertOptional(dto.title_original, assertString, "Anime.title_original") ?? dto.title;
 
   return {
     id: dto.id,
     name: dto.title,
-    jname: dto.title_original || dto.title,
+    jname: titleOriginal,
     poster: PLACEHOLDER_POSTER,
     episodes: { sub: null, dub: null },
     type: mapStatusToType(dto.status),
@@ -58,13 +61,15 @@ export function mapBackendAnimeToIAnime(dto: BackendAnime): IAnime {
  * PURE function - no fallbacks, no optional chaining
  */
 export function mapBackendAnimeToSuggestionAnime(dto: BackendAnime): ISuggestionAnime {
-  if (!dto.id) throw new Error("Anime.id is required");
-  if (!dto.title) throw new Error("Anime.title is required");
+  assertString(dto.id, "Anime.id");
+  assertString(dto.title, "Anime.title");
+
+  const titleOriginal = assertOptional(dto.title_original, assertString, "Anime.title_original") ?? dto.title;
 
   return {
     id: dto.id,
     name: dto.title,
-    jname: dto.title_original || dto.title,
+    jname: titleOriginal,
     poster: PLACEHOLDER_POSTER,
     episodes: { sub: null, dub: null },
     type: mapStatusToType(dto.status),
@@ -79,13 +84,15 @@ export function mapBackendAnimeToSuggestionAnime(dto: BackendAnime): ISuggestion
  * SpotlightAnime.type is required, so we throw if status is missing/invalid
  */
 export function mapBackendAnimeToSpotlightAnime(dto: BackendAnime, rank: number): SpotlightAnime {
-  if (!dto.id) throw new Error("Anime.id is required");
-  if (!dto.title) throw new Error("Anime.title is required");
+  assertString(dto.id, "Anime.id");
+  assertString(dto.title, "Anime.title");
   
   const type = mapStatusToType(dto.status);
   if (!type) {
     throw new Error(`Invalid or missing anime status for SpotlightAnime: ${dto.status}`);
   }
+
+  const titleOriginal = assertOptional(dto.title_original, assertString, "Anime.title_original") ?? dto.title;
 
   return {
     rank,
@@ -93,7 +100,7 @@ export function mapBackendAnimeToSpotlightAnime(dto: BackendAnime, rank: number)
     name: dto.title,
     description: "",
     poster: PLACEHOLDER_POSTER,
-    jname: dto.title_original || dto.title,
+    jname: titleOriginal,
     episodes: { sub: null, dub: null },
     type,
     otherInfo: [],
@@ -106,18 +113,20 @@ export function mapBackendAnimeToSpotlightAnime(dto: BackendAnime, rank: number)
  * TopUpcomingAnime.type is string, so we convert Type enum to string
  */
 export function mapBackendAnimeToTopUpcomingAnime(dto: BackendAnime): TopUpcomingAnime {
-  if (!dto.id) throw new Error("Anime.id is required");
-  if (!dto.title) throw new Error("Anime.title is required");
+  assertString(dto.id, "Anime.id");
+  assertString(dto.title, "Anime.title");
 
   const type = mapStatusToType(dto.status);
   if (!type) {
     throw new Error(`Invalid or missing anime status for TopUpcomingAnime: ${dto.status}`);
   }
 
+  const titleOriginal = assertOptional(dto.title_original, assertString, "Anime.title_original") ?? dto.title;
+
   return {
     id: dto.id,
     name: dto.title,
-    jname: dto.title_original || dto.title,
+    jname: titleOriginal,
     poster: PLACEHOLDER_POSTER,
     duration: "",
     type: type as string,
@@ -131,8 +140,8 @@ export function mapBackendAnimeToTopUpcomingAnime(dto: BackendAnime): TopUpcomin
  * PURE function - no fallbacks, no optional chaining
  */
 export function mapBackendReleaseToSeason(dto: BackendRelease, isCurrent: boolean): Season {
-  if (!dto.id) throw new Error("Release.id is required");
-  if (!dto.title) throw new Error("Release.title is required");
+  assertString(dto.id, "Release.id");
+  assertString(dto.title, "Release.title");
 
   return {
     id: dto.id,

@@ -1,18 +1,19 @@
 import { Episode } from "@/types/episodes";
 import { BackendEpisode } from "./common";
+import { assertString, assertNumber, assertOptional } from "@/lib/contract-guards";
 
 /**
  * Maps BackendEpisode to Episode
  * PURE function - no fallbacks, no optional chaining
  */
 export function mapBackendEpisodeToEpisode(dto: BackendEpisode): Episode {
-  if (!dto.id) throw new Error("Episode.id is required");
-  if (dto.number === undefined || dto.number === null) {
-    throw new Error("Episode.number is required");
-  }
+  assertString(dto.id, "Episode.id");
+  assertNumber(dto.number, "Episode.number");
+
+  const title = assertOptional(dto.title, assertString, "Episode.title") ?? `Episode ${dto.number}`;
 
   return {
-    title: dto.title || `Episode ${dto.number}`,
+    title,
     episodeId: dto.id,
     number: dto.number,
     isFiller: false,

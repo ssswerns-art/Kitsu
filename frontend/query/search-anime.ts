@@ -5,6 +5,7 @@ import { useQuery } from "react-query";
 import { normalizeSearchQuery } from "./search-normalize";
 import { BackendAnime } from "@/mappers/common";
 import { mapBackendAnimeToSuggestionAnime } from "@/mappers/anime.mapper";
+import { assertInternalArrayResponse } from "@/lib/contract-guards";
 
 const searchAnime = async (q: string) => {
   if (q === "") {
@@ -18,7 +19,9 @@ const searchAnime = async (q: string) => {
     },
   });
 
-  return (res.data || []).map(mapBackendAnimeToSuggestionAnime);
+  // Internal API - Kitsu backend contract guaranteed
+  assertInternalArrayResponse(res.data, "GET /search/anime");
+  return (res.data as BackendAnime[]).map(mapBackendAnimeToSuggestionAnime);
 };
 
 export const useSearchAnime = (query: string) => {
