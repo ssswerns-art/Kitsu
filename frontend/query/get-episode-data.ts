@@ -20,20 +20,15 @@ const getEpisodeData = async (
 
   if (!episodeId) return fallback;
 
-  try {
-    const res = await api.get("/api/episode/sources", {
-      params: {
-        animeEpisodeId: decodeURIComponent(episodeId),
-        server: server,
-        category: subOrDub,
-      },
-      timeout: 10000,
-    });
-    return res.data.data as IEpisodeSource;
-  } catch (error) {
-    console.error("Failed to fetch episode data", error);
-    return fallback;
-  }
+  const res = await api.get("/api/episode/sources", {
+    params: {
+      animeEpisodeId: decodeURIComponent(episodeId),
+      server: server,
+      category: subOrDub,
+    },
+    timeout: 10000,
+  });
+  return res.data.data as IEpisodeSource;
 };
 
 export const useGetEpisodeData = (

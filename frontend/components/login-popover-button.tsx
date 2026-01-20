@@ -6,6 +6,7 @@ import { Input } from "./ui/input";
 import { toast } from "sonner";
 import { useAuthSelector } from "@/store/auth-store";
 import { api } from "@/lib/api";
+import { normalizeApiError } from "@/lib/auth-errors";
 
 type FormData = {
   email: string;
@@ -84,8 +85,9 @@ function LoginPopoverButton() {
         refreshToken: tokens.refreshToken,
       });
     } catch (e) {
-      console.error("Login error:", e);
-      toast.error("Invalid email or password", {
+      const apiError = normalizeApiError(e);
+      console.error("Login error:", apiError);
+      toast.error(apiError.message, {
         style: { background: "red" },
       });
     }
@@ -137,8 +139,9 @@ function LoginPopoverButton() {
       });
       clearForm();
       setTabValue("login");
-    } catch {
-      toast.error("Signup failed. Please try again.", {
+    } catch (e) {
+      const apiError = normalizeApiError(e);
+      toast.error(apiError.message, {
         style: { background: "red" },
       });
     }

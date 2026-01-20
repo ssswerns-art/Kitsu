@@ -14,18 +14,13 @@ const getEpisodeServers = async (episodeId: string) => {
 
   if (!episodeId) return fallback;
 
-  try {
-    const res = await api.get("/api/episode/servers", {
-        params: {
-          animeEpisodeId: decodeURIComponent(episodeId),
-        },
-      timeout: 10000,
-    });
-    return res.data.data as IEpisodeServers;
-  } catch (error) {
-    console.error("Failed to fetch episode servers", error);
-    return fallback;
-  }
+  const res = await api.get("/api/episode/servers", {
+      params: {
+        animeEpisodeId: decodeURIComponent(episodeId),
+      },
+    timeout: 10000,
+  });
+  return res.data.data as IEpisodeServers;
 };
 
 export const useGetEpisodeServers = (episodeId: string) => {

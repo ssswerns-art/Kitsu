@@ -6,13 +6,8 @@ import { useQuery } from "react-query";
 const getAnimeSchedule = async (date: string) => {
   const queryParams = date ? `?date=${date}` : "";
 
-  try {
-    const res = await api.get("/api/schedule" + queryParams, { timeout: 10000 });
-    return res.data.data as IAnimeSchedule;
-  } catch (error) {
-    console.error("Failed to fetch schedule", error);
-    return { scheduledAnimes: [] } as IAnimeSchedule;
-  }
+  const res = await api.get("/api/schedule" + queryParams, { timeout: 10000 });
+  return res.data.data as IAnimeSchedule;
 };
 
 export const useGetAnimeSchedule = (

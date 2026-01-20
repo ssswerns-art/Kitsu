@@ -97,15 +97,20 @@ export const createApiClient = (): AxiosInstance => {
   apiClient.interceptors.response.use(
     (response) => response,
     async (error: AxiosError) => {
-      const status = error.response?.status;
       const config = error.config as RetriableRequestConfig | undefined;
       const isRefreshRequest = config?.url?.includes("/auth/refresh");
 
-      if (status === 403) {
+      // Normalize the error to extract the backend error code
+      const normalizedError = normalizeApiError(error);
+
+      // Backend contract: use error.code to determine action
+      // PERMISSION_DENIED (403) means token is revoked - logout immediately
+      if (normalizedError.code === "PERMISSION_DENIED") {
         return handleAuthError(error);
       }
 
-      if (status === 401 && config && !config._retry && !isRefreshRequest) {
+      // AUTH_ERROR (401) means token expired - try refresh once
+      if (normalizedError.code === "AUTH_ERROR" && config && !config._retry && !isRefreshRequest) {
         const authStore = getAuthStore();
         const refreshToken = authStore.getState().auth?.refreshToken;
 
@@ -127,11 +132,11 @@ export const createApiClient = (): AxiosInstance => {
           config.headers = headers;
           return apiClient(config);
         } catch (refreshError) {
-          const normalizedError =
+          const normalizedRefreshError =
             refreshError instanceof AxiosError
-              ? refreshError
-              : { ...normalizeApiError(refreshError), status: 401 };
-          return handleAuthError(normalizedError);
+              ? normalizeApiError(refreshError)
+              : refreshError;
+          return handleAuthError(normalizedRefreshError);
         }
       }
 
