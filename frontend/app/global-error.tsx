@@ -11,10 +11,6 @@ import {
 } from "@/lib/error-boundary-policy";
 import { assertRenderMode } from "@/lib/render-mode";
 
-// Declare render mode for this component
-export const RENDER_MODE = "client" as const;
-assertRenderMode(RENDER_MODE);
-
 export default function GlobalError({
   error,
   reset,
@@ -22,6 +18,10 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  // Declare render mode - client component
+  const RENDER_MODE = "client" as const;
+  assertRenderMode(RENDER_MODE);
+  
   useEffect(() => {
     // Use error handling policy to determine logging strategy
     const strategy = getErrorHandlingStrategy(error);

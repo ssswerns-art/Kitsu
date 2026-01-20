@@ -35,7 +35,6 @@
 import {
   BaseApiError,
   ApiContractError,
-  ApiSource,
 } from "./api-errors";
 
 /**
@@ -218,7 +217,6 @@ export function logErrorByPolicy(
   error: Error | unknown,
   strategy: ErrorHandlingStrategy
 ): void {
-  const errorMessage = error instanceof Error ? error.message : String(error);
   const logMessage = `[Error Policy] ${strategy.type.toUpperCase()}: ${strategy.reason}`;
   
   if (strategy.type === "crash") {

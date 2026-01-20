@@ -8,10 +8,6 @@ import dynamic from "next/dynamic";
 import { useEffect, useState, Suspense } from "react";
 import { assertRenderMode } from "@/lib/render-mode";
 
-// Declare render mode for this component
-export const RENDER_MODE = "client" as const;
-assertRenderMode(RENDER_MODE);
-
 // Dynamically import components
 const HeroSection = dynamic(() => import("@/components/hero-section"));
 const LatestEpisodesAnime = dynamic(
@@ -99,6 +95,10 @@ function HomePageContent() {
  * - Loading UI is handled by Suspense fallback
  */
 export default function Home() {
+  // Declare render mode - client component
+  const RENDER_MODE = "client" as const;
+  assertRenderMode(RENDER_MODE);
+  
   return (
     <div className="flex flex-col bg-[#121212]">
       <Suspense fallback={<div className="min-h-screen" />}>

@@ -30,10 +30,6 @@ import React from "react";
 import Image from "next/image";
 import { assertRenderMode } from "@/lib/render-mode";
 
-// Declare render mode for this component
-export const RENDER_MODE = "client" as const;
-assertRenderMode(RENDER_MODE);
-
 /**
  * Pure visual loading skeleton
  * 
@@ -44,6 +40,10 @@ assertRenderMode(RENDER_MODE);
  * - No logic (pure presentation)
  */
 const Loading = () => {
+  // Declare render mode - client component
+  const RENDER_MODE = "client" as const;
+  assertRenderMode(RENDER_MODE);
+  
   return (
     <div className="h-screen w-screen flex items-center justify-center">
       <div className="h-[10.25rem] w-auto">
