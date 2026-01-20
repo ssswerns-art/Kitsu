@@ -180,6 +180,7 @@ def _log_error(request: Request, status_code: int, code: str, message: str, exc:
 
 
 def _extract_canonical_error(detail: object) -> dict[str, object] | None:
+    """Return a canonical error envelope if the detail already follows the contract."""
     if not isinstance(detail, dict):
         return None
     error = detail.get("error")
@@ -211,17 +212,17 @@ async def handle_app_error(request: Request, exc: AppError) -> JSONResponse:
 async def handle_http_exception(
     request: Request, exc: StarletteHTTPException
 ) -> JSONResponse:
-    payload = _extract_canonical_error(exc.detail)
-    if payload is not None:
-        error = payload["error"]
-        code = error.get("code", resolve_error_code(exc.status_code))
-        message = error.get("message", "")
-        _log_error(request, exc.status_code, str(code), str(message))
-        return JSONResponse(status_code=exc.status_code, content=payload)
     safe_message = SAFE_HTTP_MESSAGES.get(
         exc.status_code,
         InternalError.message if exc.status_code >= status.HTTP_500_INTERNAL_SERVER_ERROR else "Request failed",
     )
+    payload = _extract_canonical_error(exc.detail)
+    if payload is not None:
+        error = payload["error"]
+        code = error.get("code", resolve_error_code(exc.status_code))
+        message = error.get("message", safe_message)
+        _log_error(request, exc.status_code, str(code), str(message))
+        return JSONResponse(status_code=exc.status_code, content=payload)
     detail = exc.detail
     detail_message = detail if isinstance(detail, str) else ""
     log_message = detail_message.strip() or safe_message
