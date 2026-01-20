@@ -110,9 +110,10 @@ async def check_anime_has_video(
     """
     Check if anime has at least one episode with video.
     
-    Note: This is a placeholder implementation. In a real system, this would
-    require joining with the releases table to find episodes for this specific anime.
-    For now, we return False as a safe default.
+    An anime has video if there exists at least one episode that:
+    - Belongs to a release for this anime
+    - Has iframe_url (video source)
+    - Is not soft-deleted
     
     Args:
         session: Database session
@@ -121,14 +122,28 @@ async def check_anime_has_video(
     Returns:
         True if anime has video, False otherwise
     """
-    # TODO: Implement proper check with joins:
-    # 1. Find release(s) for this anime_id
-    # 2. Find episodes for those release(s)  
-    # 3. Check if any episode has iframe_url
+    from ..models.release import Release
     
-    # For now, return False as a safe default
-    # This ensures anime cannot be published without proper video setup
-    return False
+    # Query: Find any episode with video for this anime
+    # Join: Anime -> Release -> Episode
+    # Conditions: episode.iframe_url IS NOT NULL AND episode.is_deleted = false
+    query = (
+        select(func.count())
+        .select_from(Episode)
+        .join(Release, Episode.release_id == Release.id)
+        .where(
+            and_(
+                Release.anime_id == anime_id,
+                Episode.iframe_url.isnot(None),
+                Episode.iframe_url != "",
+                Episode.is_deleted is False,
+            )
+        )
+    )
+    
+    result = await session.execute(query)
+    count = result.scalar() or 0
+    return count > 0
 
 
 async def detect_anime_errors(
