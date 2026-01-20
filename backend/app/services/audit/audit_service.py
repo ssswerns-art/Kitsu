@@ -25,12 +25,12 @@ class AuditService:
         reason: str | None = None,
         ip_address: str | None = None,
         user_agent: str | None = None,
-    ) -> None:
+    ):
         """Log an audit event."""
         actor_id = actor.id if actor else None
         entity_id_str = str(entity_id)
         
-        await self.audit_repo.create(
+        return await self.audit_repo.create(
             actor_id=actor_id,
             actor_type=actor_type,
             action=action,
@@ -79,9 +79,9 @@ class AuditService:
         reason: str | None = None,
         ip_address: str | None = None,
         user_agent: str | None = None,
-    ) -> None:
+    ):
         """Log an update event."""
-        await self.log(
+        return await self.log(
             action=f"{entity_type}.update",
             entity_type=entity_type,
             entity_id=entity_id,
