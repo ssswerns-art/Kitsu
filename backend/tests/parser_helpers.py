@@ -20,6 +20,14 @@ class AsyncSessionAdapter:
 
     async def rollback(self) -> None:
         self._session.rollback()
+    
+    def add(self, instance) -> None:
+        """Add an instance to the session."""
+        self._session.add(instance)
+    
+    async def refresh(self, instance, **kwargs) -> None:
+        """Refresh an instance from the database."""
+        self._session.refresh(instance, **kwargs)
 
     @asynccontextmanager
     async def begin(self):
