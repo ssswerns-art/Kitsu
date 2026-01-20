@@ -83,12 +83,35 @@ export const normalizeApiError = (error: unknown): ApiError => {
   };
 };
 
-const authFailureHandlers = new Set<(redirectTo: string) => void>();
+type AuthFailureState = {
+  authFailureHandlers: Set<(redirectTo: string) => void>;
+  authFailureCommitted: boolean;
+};
+
+const createAuthFailureState = (): AuthFailureState => ({
+  authFailureHandlers: new Set<(redirectTo: string) => void>(),
+  authFailureCommitted: false,
+});
+
+const getIsServer = () => typeof document === "undefined";
+
+let clientAuthFailureState: AuthFailureState | null = null;
+
+const getAuthFailureState = (): AuthFailureState => {
+  if (getIsServer()) {
+    return createAuthFailureState();
+  }
+  if (!clientAuthFailureState) {
+    clientAuthFailureState = createAuthFailureState();
+  }
+  return clientAuthFailureState;
+};
 
 export const setAuthFailureHandler = (handler: (redirectTo: string) => void) => {
-  authFailureHandlers.add(handler);
+  const state = getAuthFailureState();
+  state.authFailureHandlers.add(handler);
   return () => {
-    authFailureHandlers.delete(handler);
+    state.authFailureHandlers.delete(handler);
   };
 };
 
@@ -99,16 +122,15 @@ const navigateHome = () => {
   window.location.replace(ROUTES.HOME);
 };
 
-let authFailureCommitted = false;
-
 const handleAuthFailure = () => {
-  if (authFailureCommitted) {
+  const state = getAuthFailureState();
+  if (state.authFailureCommitted) {
     return;
   }
-  authFailureCommitted = true;
+  state.authFailureCommitted = true;
   getAuthStore().getState().clearAuth();
-  if (authFailureHandlers.size > 0) {
-    authFailureHandlers.forEach((handler) => handler(ROUTES.HOME));
+  if (state.authFailureHandlers.size > 0) {
+    state.authFailureHandlers.forEach((handler) => handler(ROUTES.HOME));
     return;
   }
   navigateHome();

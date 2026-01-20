@@ -12,7 +12,19 @@ export type PlayerStorage = {
   updatedAt?: number;
 };
 
-const storageCache = new Map<string, PlayerStorage>();
+const getIsServer = () => typeof document === "undefined";
+
+let clientStorageCache: Map<string, PlayerStorage> | null = null;
+
+const getStorageCache = () => {
+  if (getIsServer()) {
+    return null;
+  }
+  if (!clientStorageCache) {
+    clientStorageCache = new Map<string, PlayerStorage>();
+  }
+  return clientStorageCache;
+};
 const MILLISECONDS_IN_SECOND = 1000;
 
 export const getPlayerStorageKey = (animeId: string) => `player:${animeId}`;
@@ -35,10 +47,11 @@ const normalizeStorage = (value: PlayerStorage): PlayerStorage => ({
 export const getPlayerStorage = (animeId: string): PlayerStorage => {
   if (!animeId) return {};
   const key = getPlayerStorageKey(animeId);
-  const cached = storageCache.get(key);
+  const cache = getStorageCache();
+  const cached = cache?.get(key);
   if (cached) return cached;
   const stored = normalizeStorage(getLocalStorageJSON<PlayerStorage>(key, {}));
-  storageCache.set(key, stored);
+  cache?.set(key, stored);
   return stored;
 };
 
@@ -53,7 +66,7 @@ export const updatePlayerStorage = (
     ...update,
     updatedAt: Math.floor(Date.now() / MILLISECONDS_IN_SECOND),
   };
-  storageCache.set(key, next);
+  getStorageCache()?.set(key, next);
   setLocalStorageJSON(key, next);
   return next;
 };
