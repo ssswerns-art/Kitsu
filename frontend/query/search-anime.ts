@@ -2,8 +2,9 @@ import { queryKeys } from "@/constants/query-keys";
 import { api } from "@/lib/api";
 import { ISuggestionAnime } from "@/types/anime";
 import { useQuery } from "react-query";
-import { PLACEHOLDER_POSTER } from "@/utils/constants";
 import { normalizeSearchQuery } from "./search-normalize";
+import { BackendAnimeDTO } from "@/mappers/common";
+import { mapSuggestionAnime } from "@/mappers/anime.mapper";
 
 const searchAnime = async (q: string) => {
   if (q === "") {
@@ -17,16 +18,7 @@ const searchAnime = async (q: string) => {
     },
   });
 
-  return (res.data || []).map((anime: any) => ({
-    id: anime.id,
-    name: anime.title,
-    jname: anime.title_original || anime.title,
-    poster: PLACEHOLDER_POSTER,
-    episodes: { sub: null, dub: null },
-    type: anime.status || undefined,
-    rank: undefined,
-    moreInfo: [],
-  })) as ISuggestionAnime[];
+  return (res.data || []).map((anime: BackendAnimeDTO) => mapSuggestionAnime(anime));
 };
 
 export const useSearchAnime = (query: string) => {

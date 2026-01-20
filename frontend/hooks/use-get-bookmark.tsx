@@ -6,6 +6,8 @@ import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { PLACEHOLDER_POSTER } from "@/utils/constants";
 import { getLocalStorageJSON, setLocalStorageJSON } from "@/utils/storage";
+import { BackendFavoriteDTO, BackendAnimeDTO } from "@/mappers/common";
+import { mapFavorite } from "@/mappers/watch.mapper";
 
 type Props = {
   animeID?: string;
@@ -82,38 +84,30 @@ function useBookMarks({
         const res = await api.get("/favorites", {
           params: { limit: per_page || 20, offset: ((page || 1) - 1) * (per_page || 20) },
         });
-        const favorites = (res.data || []) as Array<{
-          id: string;
-          anime_id: string;
-          created_at?: string;
-        }>;
-
-        type BackendAnime = {
-          id: string;
-          title: string;
-          poster?: string | null;
-        };
+        const favorites = (res.data || []) as BackendFavoriteDTO[];
 
         const detailed = await Promise.all(
           favorites.map(async (fav) => {
             try {
-              const animeRes = await api.get<BackendAnime>(`/anime/${fav.anime_id}`);
-              return { fav, anime: animeRes.data };
+              const mapped = mapFavorite(fav);
+              const animeRes = await api.get<BackendAnimeDTO>(`/anime/${mapped.animeId}`);
+              return { mapped, anime: animeRes.data };
             } catch {
-              return { fav, anime: null };
+              const mapped = mapFavorite(fav);
+              return { mapped, anime: null };
             }
           }),
         );
 
         if (favorites.length > 0) {
-          const mapped = detailed.map(({ fav, anime }) => ({
-            id: fav.id,
+          const mapped = detailed.map(({ mapped, anime }) => ({
+            id: mapped.id,
             user: auth.id || "",
-            animeId: fav.anime_id,
+            animeId: mapped.animeId,
             thumbnail: anime?.poster || PLACEHOLDER_POSTER,
             animeTitle: anime?.title || "Favorite",
             status: "favorite",
-            created: fav.created_at || "",
+            created: mapped.createdAt || "",
             expand: { watchHistory: [] as WatchHistory[] },
           }));
           setTotalPages(1);

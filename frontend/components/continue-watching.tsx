@@ -18,18 +18,8 @@ import {
   convertFractionToPercent,
   parseNumber,
 } from "@/utils/player-progress";
-
-type ContinueWatchingResponse = {
-  anime_id: string;
-  episode: number;
-  progress_percent?: number | null;
-};
-
-type BackendAnime = {
-  id: string;
-  title: string;
-  poster?: string | null;
-};
+import { BackendWatchProgressDTO, BackendAnimeDTO } from "@/mappers/common";
+import { mapWatchProgress } from "@/mappers/watch.mapper";
 
 type ContinueWatchingItem = {
   id: string;
@@ -85,7 +75,7 @@ const ContinueWatching = () => {
 
       if (isAuthenticated) {
         try {
-          const response = await api.get<ContinueWatchingResponse[]>(
+          const response = await api.get<BackendWatchProgressDTO[]>(
             "/watch/continue",
             { params: { limit: displayLimit } },
           );
@@ -93,26 +83,28 @@ const ContinueWatching = () => {
           const detailed = await Promise.all(
             items.map(async (item) => {
               try {
-                const animeResponse = await api.get<BackendAnime>(
-                  `/anime/${item.anime_id}`,
+                const mapped = mapWatchProgress(item);
+                const animeResponse = await api.get<BackendAnimeDTO>(
+                  `/anime/${mapped.animeId}`,
                 );
-                return { item, anime: animeResponse.data };
+                return { mapped, anime: animeResponse.data };
               } catch (error) {
                 console.error("Failed to load anime details", error);
-                return { item, anime: null };
+                const mapped = mapWatchProgress(item);
+                return { mapped, anime: null };
               }
             }),
           );
 
-          resolved = detailed.map(({ item, anime }) => {
+          resolved = detailed.map(({ mapped, anime }) => {
             const { progressPercent, isCompleted } = resolveProgress(
-              item.progress_percent,
+              mapped.progressPercent,
             );
             return {
-              id: item.anime_id,
+              id: mapped.animeId,
               title: anime?.title || "",
               poster: anime?.poster || PLACEHOLDER_POSTER,
-              episode: item.episode,
+              episode: mapped.episode,
               progressPercent,
               isCompleted,
             };

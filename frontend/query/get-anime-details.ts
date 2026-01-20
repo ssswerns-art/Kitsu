@@ -3,23 +3,8 @@ import { api } from "@/lib/api";
 import { IAnimeDetails } from "@/types/anime-details";
 import { useQuery } from "react-query";
 import { PLACEHOLDER_POSTER } from "@/utils/constants";
-
-type BackendAnime = {
-  id: string;
-  title: string;
-  title_original?: string | null;
-  description?: string | null;
-  year?: number | null;
-  status?: string | null;
-};
-
-type BackendRelease = {
-  id: string;
-  anime_id: string;
-  title: string;
-  year?: number | null;
-  status?: string | null;
-};
+import { BackendAnimeDTO, BackendReleaseDTO } from "@/mappers/common";
+import { mapAnimeInfo, mapSeason } from "@/mappers/anime.mapper";
 
 const getAnimeDetails = async (animeId: string) => {
   const emptyDetails: IAnimeDetails = {
@@ -61,8 +46,8 @@ const getAnimeDetails = async (animeId: string) => {
   };
 
   const [animeRes, releasesRes] = await Promise.all([
-    api.get<BackendAnime>(`/anime/${animeId}`),
-    api.get<BackendRelease[]>("/releases", { params: { limit: 100, offset: 0 } }),
+    api.get<BackendAnimeDTO>(`/anime/${animeId}`),
+    api.get<BackendReleaseDTO[]>("/releases", { params: { limit: 100, offset: 0 } }),
   ]);
 
   const anime = animeRes.data;
@@ -70,28 +55,16 @@ const getAnimeDetails = async (animeId: string) => {
     (releasesRes.data || []).filter((release) => release.anime_id === animeId) ||
     [];
 
-  const seasons = releases.map((release, idx) => ({
-    id: release.id,
-    name: release.title,
-    title: release.title,
-    poster: PLACEHOLDER_POSTER,
-    isCurrent: idx === 0,
-  }));
+  const seasons = releases.map((release, idx) => mapSeason(release, idx === 0));
+  const animeInfo = mapAnimeInfo(anime);
 
   return {
     ...emptyDetails,
     anime: {
       info: {
-        ...emptyDetails.anime.info,
-        id: anime.id,
-        name: anime.title,
-        description: anime.description || "",
+        ...animeInfo,
         stats: {
-          rating: anime.status || "",
-          quality: "",
-          episodes: { sub: 0, dub: 0 },
-          type: anime.status || "Unknown",
-          duration: "",
+          ...animeInfo.stats,
         },
       },
       moreInfo: {

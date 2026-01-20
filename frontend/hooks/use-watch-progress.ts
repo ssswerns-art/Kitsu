@@ -5,13 +5,8 @@ import { api } from "@/lib/api";
 import { useAuthSelector } from "@/store/auth-store";
 import { getPlayerStorage, updatePlayerStorage } from "@/utils/player-storage";
 import { convertFractionToPercent, parseNumber } from "@/utils/player-progress";
-
-type WatchProgressResponse = {
-  anime_id: string;
-  episode: number;
-  position_seconds?: number | null;
-  progress_percent?: number | null;
-};
+import { BackendWatchProgressDTO } from "@/mappers/common";
+import { mapWatchProgress } from "@/mappers/watch.mapper";
 
 type WatchProgressRequestPayload = {
   anime_id: string;
@@ -74,25 +69,26 @@ export const useWatchProgress = (animeId: string) => {
     }
 
     try {
-      const response = await api.get<WatchProgressResponse[]>("/watch/continue", {
+      const response = await api.get<BackendWatchProgressDTO[]>("/watch/continue", {
         params: { limit: DEFAULT_LIMIT },
       });
-      const match = (response.data || []).find(
+      const backendMatch = (response.data || []).find(
         (item) => item.anime_id === animeId,
       );
-      if (match) {
+      if (backendMatch) {
+        const mapped = mapWatchProgress(backendMatch);
         const progressPercent = convertFractionToPercent(
-          parseNumber(match.progress_percent),
+          parseNumber(mapped.progressPercent),
         );
-        const positionSeconds = parseNumber(match.position_seconds);
+        const positionSeconds = parseNumber(mapped.positionSeconds);
         updatePlayerStorage(animeId, {
-          lastEpisode: match.episode,
+          lastEpisode: mapped.episode,
           positionSeconds,
           progressPercent,
           syncedToServer: true,
         });
         setProgress({
-          episode: match.episode,
+          episode: mapped.episode,
           translationKey: localSnapshot.lastTranslation,
           positionSeconds,
           progressPercent,
