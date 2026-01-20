@@ -15,7 +15,14 @@ from typing import Any
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...crud import anime_admin
+from ...crud.anime_admin import (
+    get_anime_admin_list,
+    get_anime_by_id_admin,
+    check_anime_has_video,
+    detect_anime_errors,
+    update_anime_admin,
+    auto_update_broken_state,
+)
 from ...models.anime import Anime
 from ...models.user import User
 from ...schemas.anime_admin import (
@@ -62,7 +69,7 @@ class AnimeAdminService:
         await self.permission_service.require_permission(actor, "anime.view")
         
         # Get anime list from CRUD
-        anime_list, total = await anime_admin.get_anime_admin_list(
+        anime_list, total = await get_anime_admin_list(
             self.session,
             state=filters.state,
             source=filters.source,
@@ -78,10 +85,10 @@ class AnimeAdminService:
         items = []
         for anime in anime_list:
             # Compute has_video
-            has_video = await anime_admin.check_anime_has_video(self.session, anime.id)
+            has_video = await check_anime_has_video(self.session, anime.id)
             
             # Compute errors
-            errors_count, _ = await anime_admin.detect_anime_errors(self.session, anime)
+            errors_count, _ = await detect_anime_errors(self.session, anime)
             
             # Create response item
             item = AnimeAdminListItem(
@@ -137,8 +144,8 @@ class AnimeAdminService:
             )
         
         # Compute fields
-        has_video = await anime_admin.check_anime_has_video(self.session, anime.id)
-        errors_count, errors = await anime_admin.detect_anime_errors(self.session, anime)
+        has_video = await check_anime_has_video(self.session, anime.id)
+        errors_count, errors = await detect_anime_errors(self.session, anime)
         
         # Create response
         return AnimeAdminDetail(
@@ -264,7 +271,7 @@ class AnimeAdminService:
             
             # Additional validation: cannot publish without video
             if new_state == "published":
-                has_video = await anime_admin.check_anime_has_video(self.session, anime.id)
+                has_video = await check_anime_has_video(self.session, anime.id)
                 if not has_video:
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
@@ -276,7 +283,7 @@ class AnimeAdminService:
         
         # Update anime
         actor_id = actor.id if actor else None
-        updated_anime = await anime_admin.update_anime_admin(
+        updated_anime = await update_anime_admin(
             self.session,
             anime,
             update_dict,
@@ -285,7 +292,7 @@ class AnimeAdminService:
         
         # Auto-detect broken state
         warnings = []
-        state_changed, reason = await anime_admin.auto_update_broken_state(
+        state_changed, reason = await auto_update_broken_state(
             self.session,
             updated_anime,
         )

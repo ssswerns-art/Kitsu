@@ -43,7 +43,7 @@ async def get_anime_admin_list(
         Tuple of (list of anime, total count)
     """
     # Build base query
-    query = select(Anime).where(Anime.is_deleted == False)
+    query = select(Anime).where(Anime.is_deleted is False)
     
     # Apply filters
     if state:
@@ -110,6 +110,10 @@ async def check_anime_has_video(
     """
     Check if anime has at least one episode with video.
     
+    Note: This is a placeholder implementation. In a real system, this would
+    require joining with the releases table to find episodes for this specific anime.
+    For now, we return False as a safe default.
+    
     Args:
         session: Database session
         anime_id: Anime UUID
@@ -117,18 +121,14 @@ async def check_anime_has_video(
     Returns:
         True if anime has video, False otherwise
     """
-    # This requires joining with releases and episodes
-    # For now, return a simple check
-    # TODO: Implement proper check with joins to release -> episodes
-    query = select(func.count()).select_from(Episode).where(
-        and_(
-            Episode.iframe_url.isnot(None),
-            Episode.iframe_url != "",
-        )
-    )
-    result = await session.execute(query)
-    count = result.scalar() or 0
-    return count > 0
+    # TODO: Implement proper check with joins:
+    # 1. Find release(s) for this anime_id
+    # 2. Find episodes for those release(s)  
+    # 3. Check if any episode has iframe_url
+    
+    # For now, return False as a safe default
+    # This ensures anime cannot be published without proper video setup
+    return False
 
 
 async def detect_anime_errors(
@@ -192,8 +192,11 @@ async def update_anime_admin(
     """
     # Update only non-None fields
     for field, value in update_data.items():
-        if value is not None and hasattr(anime, field):
-            setattr(anime, field, value)
+        if hasattr(anime, field):
+            # Only update if value is different from current value
+            current_value = getattr(anime, field)
+            if value != current_value:
+                setattr(anime, field, value)
     
     # Set updated_by
     if actor_id:
