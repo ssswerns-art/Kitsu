@@ -115,3 +115,30 @@ class ParserPublishPreviewRead(BaseModel):
     external: ParserPublishAnimePayload
     current: ParserPublishAnimePayload | None
     changes: list[str]
+
+
+class ParserModeToggleRequest(BaseModel):
+    mode: Literal["manual", "auto"]
+    reason: str | None = None
+
+
+class ParserEmergencyStopRequest(BaseModel):
+    reason: str
+
+
+class ParserJobLogRead(BaseModel):
+    id: int
+    job_id: int
+    level: str
+    message: str
+    created_at: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ParserLogFilter(BaseModel):
+    level: Literal["error", "warning", "info"] | None = None
+    source: str | None = None
+    from_date: str | None = None
+    to_date: str | None = None
+    limit: int = 100

@@ -14,12 +14,24 @@ BASE_PERMISSIONS: Final[tuple[Permission, ...]] = (
     "read:content",
     "write:content",
     "admin:*",
+    "admin:parser.settings",
+    "admin:parser.emergency",
+    "admin:parser.logs",
 )
 
 ROLE_PERMISSIONS: Final[dict[Role, tuple[Permission, ...]]] = {
     "guest": ("read:content",),
     "user": ("read:profile", "write:profile", "read:content", "write:content"),
-    "admin": BASE_PERMISSIONS,
+    "admin": (
+        "read:profile",
+        "write:profile",
+        "read:content",
+        "write:content",
+        "admin:*",
+        "admin:parser.settings",
+        "admin:parser.emergency",
+        "admin:parser.logs",
+    ),
 }
 
 
