@@ -43,8 +43,8 @@ export function mapBackendAnimeToIAnime(dto: BackendAnime): IAnime {
   assertString(dto.id, "Anime.id");
   assertString(dto.title, "Anime.title");
 
-  const titleOriginal = assertOptional(dto.title_original, (v) => assertString(v, "Anime.title_original"))
-    ? dto.title_original
+  const titleOriginal: string = assertOptional(dto.title_original, (v) => assertString(v, "Anime.title_original"))
+    ? dto.title_original as string
     : dto.title;
 
   return {
@@ -66,8 +66,8 @@ export function mapBackendAnimeToSuggestionAnime(dto: BackendAnime): ISuggestion
   assertString(dto.id, "Anime.id");
   assertString(dto.title, "Anime.title");
 
-  const titleOriginal = assertOptional(dto.title_original, (v) => assertString(v, "Anime.title_original"))
-    ? dto.title_original
+  const titleOriginal: string = assertOptional(dto.title_original, (v) => assertString(v, "Anime.title_original"))
+    ? dto.title_original as string
     : dto.title;
 
   return {
@@ -96,8 +96,8 @@ export function mapBackendAnimeToSpotlightAnime(dto: BackendAnime, rank: number)
     throw new Error(`Invalid or missing anime status for SpotlightAnime: ${dto.status}`);
   }
 
-  const titleOriginal = assertOptional(dto.title_original, (v) => assertString(v, "Anime.title_original"))
-    ? dto.title_original
+  const titleOriginal: string = assertOptional(dto.title_original, (v) => assertString(v, "Anime.title_original"))
+    ? dto.title_original as string
     : dto.title;
 
   return {
@@ -127,8 +127,8 @@ export function mapBackendAnimeToTopUpcomingAnime(dto: BackendAnime): TopUpcomin
     throw new Error(`Invalid or missing anime status for TopUpcomingAnime: ${dto.status}`);
   }
 
-  const titleOriginal = assertOptional(dto.title_original, (v) => assertString(v, "Anime.title_original"))
-    ? dto.title_original
+  const titleOriginal: string = assertOptional(dto.title_original, (v) => assertString(v, "Anime.title_original"))
+    ? dto.title_original as string
     : dto.title;
 
   return {

@@ -64,20 +64,20 @@ const getAnimeDetails = async (animeId: string) => {
     mapBackendReleaseToSeason(release, idx === 0)
   );
 
-  const description = assertOptional(anime.description, (v) => assertString(v, "Anime.description"))
-    ? anime.description
+  const description: string = assertOptional(anime.description, (v) => assertString(v, "Anime.description"))
+    ? anime.description as string
     : "";
 
-  const titleOriginal = assertOptional(anime.title_original, (v) => assertString(v, "Anime.title_original"))
-    ? anime.title_original
+  const titleOriginal: string = assertOptional(anime.title_original, (v) => assertString(v, "Anime.title_original"))
+    ? anime.title_original as string
     : anime.title;
 
-  const status = assertOptional(anime.status, (v) => assertString(v, "Anime.status"))
-    ? anime.status
+  const status: string = assertOptional(anime.status, (v) => assertString(v, "Anime.status"))
+    ? anime.status as string
     : "Unknown";
 
-  const year = assertOptional(anime.year, (v) => assertNumber(v, "Anime.year"))
-    ? anime.year
+  const year: number | null = assertOptional(anime.year, (v) => assertNumber(v, "Anime.year"))
+    ? anime.year as number
     : null;
 
   return {

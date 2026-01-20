@@ -10,8 +10,8 @@ export function mapBackendEpisodeToEpisode(dto: BackendEpisode): Episode {
   assertString(dto.id, "Episode.id");
   assertNumber(dto.number, "Episode.number");
 
-  const title = assertOptional(dto.title, (v) => assertString(v, "Episode.title"))
-    ? dto.title
+  const title: string = assertOptional(dto.title, (v) => assertString(v, "Episode.title"))
+    ? dto.title as string
     : `Episode ${dto.number}`;
 
   return {
