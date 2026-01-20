@@ -24,14 +24,13 @@ export type IAuth = {
 
 export interface IAuthStore {
   auth: IAuth | null;
-  authStatus: "unknown" | "authenticated" | "unauthenticated";
   setAuth: (state: IAuth) => void;
   clearAuth: () => void;
   isRefreshing: boolean;
   setIsRefreshing: (val: boolean) => void;
 }
 
-type AuthState = Pick<IAuthStore, "auth" | "isRefreshing" | "authStatus">;
+type AuthState = Pick<IAuthStore, "auth" | "isRefreshing">;
 type AuthStoreApi = StoreApi<IAuthStore> & {
   persist?: {
     hasHydrated: () => boolean;
@@ -41,7 +40,6 @@ type AuthStoreApi = StoreApi<IAuthStore> & {
 
 const defaultState: AuthState = {
   auth: null,
-  authStatus: "unknown",
   isRefreshing: false,
 };
 
@@ -73,7 +71,7 @@ const createAuthStore = (initState: AuthState = defaultState) => {
         ...defaultState,
         ...initState,
         setAuth: (state: IAuth) => set({ auth: state }),
-        clearAuth: () => set({ auth: null, authStatus: "unauthenticated" }),
+        clearAuth: () => set({ auth: null }),
         setIsRefreshing: (val: boolean) => set({ isRefreshing: val }),
       }),
       {
@@ -86,19 +84,6 @@ const createAuthStore = (initState: AuthState = defaultState) => {
       },
     ),
   ) as AuthStoreApi;
-
-  const setAuthStatusFromAuth = () => {
-    const { auth } = store.getState();
-    store.setState({
-      authStatus: auth?.accessToken ? "authenticated" : "unauthenticated",
-    });
-  };
-
-  if (store.persist?.hasHydrated?.()) {
-    setAuthStatusFromAuth();
-  } else {
-    store.persist?.onFinishHydration?.(setAuthStatusFromAuth);
-  }
 
   return store;
 };

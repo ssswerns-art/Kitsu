@@ -33,18 +33,17 @@ function LoginPopoverButton() {
 
   const fetchProfile = async (
     accessToken: string,
-    fallbackEmail: string,
-  ): Promise<{ email: string; id?: string }> => {
+  ): Promise<{ email?: string; id?: string } | null> => {
     try {
       const profile = await api.get("/users/me", {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
       return {
-        email: (profile.data as any)?.email || fallbackEmail,
+        email: (profile.data as any)?.email,
         id: (profile.data as any)?.id,
       };
     } catch {
-      return { email: fallbackEmail, id: undefined };
+      return null;
     }
   };
 
@@ -67,9 +66,9 @@ function LoginPopoverButton() {
         throw new Error("Missing tokens in auth response");
       }
 
-      const profile = await fetchProfile(tokens.accessToken, formData.email);
-      const userEmail = profile.email;
-      const userId = profile.id;
+      const profile = await fetchProfile(tokens.accessToken);
+      const userEmail = profile?.email;
+      const userId = profile?.id;
 
       toast.success("Login successful", { style: { background: "green" } });
       clearForm();
@@ -121,9 +120,9 @@ function LoginPopoverButton() {
         throw new Error("Missing tokens in auth response");
       }
 
-      const profile = await fetchProfile(tokens.accessToken, formData.email);
-      const userEmail = profile.email;
-      const userId = profile.id;
+      const profile = await fetchProfile(tokens.accessToken);
+      const userEmail = profile?.email;
+      const userId = profile?.id;
 
       setAuth({
         id: userId,

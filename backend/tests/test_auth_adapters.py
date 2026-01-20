@@ -89,6 +89,14 @@ async def test_refresh_token_repository_delegates(
         assert for_update is True
         return get_sentinel
 
+    async def fake_get_by_user_id(  # type: ignore[no-untyped-def]
+        session_arg, user_id, *, for_update=False
+    ):
+        assert session_arg is session
+        assert user_id == uuid.UUID(int=3)
+        assert for_update is False
+        return get_sentinel
+
     async def fake_revoke(session_arg, user_id):  # type: ignore[no-untyped-def]
         assert session_arg is session
         assert user_id == uuid.UUID(int=2)
@@ -98,6 +106,9 @@ async def test_refresh_token_repository_delegates(
         refresh_token_crud, "create_or_rotate_refresh_token", fake_create
     )
     monkeypatch.setattr(refresh_token_crud, "get_refresh_token_by_hash", fake_get)
+    monkeypatch.setattr(
+        refresh_token_crud, "get_refresh_token_by_user_id", fake_get_by_user_id
+    )
     monkeypatch.setattr(refresh_token_crud, "revoke_refresh_token", fake_revoke)
 
     repo = RefreshTokenRepository(session)
@@ -111,6 +122,7 @@ async def test_refresh_token_repository_delegates(
         is create_sentinel
     )
     assert await repo.get_by_hash("token-hash", for_update=True) is get_sentinel
+    assert await repo.get_by_user_id(uuid.UUID(int=3)) is get_sentinel
     assert await repo.revoke(uuid.UUID(int=2)) is revoke_sentinel
 
     await repo.commit()

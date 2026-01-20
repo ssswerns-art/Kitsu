@@ -23,6 +23,11 @@ class RefreshTokenPort(Protocol):
     ) -> RefreshTokenData | None:
         ...
 
+    async def get_by_user_id(
+        self, user_id: uuid.UUID, *, for_update: bool = False
+    ) -> RefreshTokenData | None:
+        ...
+
     async def revoke(self, user_id: uuid.UUID) -> RefreshTokenData | None:
         ...
 
