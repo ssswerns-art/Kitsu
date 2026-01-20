@@ -1,9 +1,7 @@
 import { queryKeys } from "@/constants/query-keys";
-import { api } from "@/lib/api";
 import { useQuery } from "react-query";
-import { assertExternalApiShape, assertFieldExists } from "@/lib/contract-guards";
-import { withRetryAndFallback, EXTERNAL_API_POLICY } from "@/lib/api-retry";
-import { ApiContractError, normalizeToApiError } from "@/lib/api-errors";
+import { ApiContractError } from "@/lib/api-errors";
+import { fetchAnimeBanner } from "@/external/anilist/anilist.adapter";
 
 interface IAnimeBanner {
   Media: {
@@ -12,52 +10,10 @@ interface IAnimeBanner {
   };
 }
 
-const getAnimeBanner = async (anilistID: number) => {
-  const endpoint = "https://graphql.anilist.co";
-  
-  // Fallback for external API when retries exhausted
-  const fallback: IAnimeBanner = {
-    Media: {
-      id: anilistID,
-      bannerImage: "",
-    },
-  };
-
-  return withRetryAndFallback(
-    async () => {
-      try {
-        const res = await api.post(
-          endpoint,
-          {
-            query: `
-            query ($id: Int) {
-              Media(id: $id, type: ANIME) {
-                id
-                bannerImage
-              }
-            }
-          `,
-            variables: {
-              id: anilistID,
-            },
-          },
-          { timeout: 10000 },
-        );
-        
-        // External API - GraphQL AniList, schema not guaranteed
-        assertExternalApiShape(res.data, endpoint);
-        assertFieldExists(res.data, 'data', endpoint);
-        
-        return res.data.data as IAnimeBanner;
-      } catch (error) {
-        // Map ContractError to ApiContractError
-        throw normalizeToApiError(error, endpoint);
-      }
-    },
-    EXTERNAL_API_POLICY,
-    endpoint,
-    fallback
-  );
+const getAnimeBanner = async (anilistID: number): Promise<IAnimeBanner> => {
+  // Query layer calls ONLY adapter functions
+  // No knowledge of GraphQL, axios, retry logic, or external API contracts
+  return fetchAnimeBanner(anilistID);
 };
 
 export const useGetAnimeBanner = (anilistID: number) => {

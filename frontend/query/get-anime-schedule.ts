@@ -1,39 +1,13 @@
 import { queryKeys } from "@/constants/query-keys";
-import { api } from "@/lib/api";
 import { IAnimeSchedule } from "@/types/anime-schedule";
 import { useQuery } from "react-query";
-import { assertExternalApiShape, assertFieldExists } from "@/lib/contract-guards";
-import { withRetryAndFallback, EXTERNAL_API_POLICY } from "@/lib/api-retry";
-import { ApiContractError, normalizeToApiError } from "@/lib/api-errors";
+import { ApiContractError } from "@/lib/api-errors";
+import { fetchAnimeSchedule } from "@/external/proxy/proxy.adapter";
 
-const getAnimeSchedule = async (date: string) => {
-  const endpoint = "/api/schedule";
-  const queryParams = date ? `?date=${date}` : "";
-  
-  // Fallback for external API when retries exhausted
-  const fallback: IAnimeSchedule = {
-    scheduledAnimes: [],
-  };
-
-  return withRetryAndFallback(
-    async () => {
-      try {
-        const res = await api.get(endpoint + queryParams, { timeout: 10000 });
-        
-        // External API - proxy/third-party, schema not guaranteed
-        assertExternalApiShape(res.data, endpoint);
-        assertFieldExists(res.data, 'data', endpoint);
-        
-        return res.data.data as IAnimeSchedule;
-      } catch (error) {
-        // Map ContractError to ApiContractError
-        throw normalizeToApiError(error, endpoint);
-      }
-    },
-    EXTERNAL_API_POLICY,
-    endpoint,
-    fallback
-  );
+const getAnimeSchedule = async (date: string): Promise<IAnimeSchedule> => {
+  // Query layer calls ONLY adapter functions
+  // No knowledge of URLs, axios, retry logic, or external API contracts
+  return fetchAnimeSchedule(date);
 };
 
 export const useGetAnimeSchedule = (
