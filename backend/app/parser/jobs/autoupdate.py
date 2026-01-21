@@ -11,7 +11,7 @@ from redis.exceptions import RedisError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import AsyncSessionLocal
-from app.infra.redis import DistributedLock, get_async_redis_client
+from app.infra.redis import DistributedLock, GlobalJobCounter, get_async_redis_client
 
 from ..services.autoupdate_service import (
     ParserEpisodeAutoupdateService,
@@ -23,6 +23,10 @@ from ..services.sync_service import get_parser_settings
 DEFAULT_INTERVAL_MINUTES = 60
 SCHEDULER_LOCK_KEY = "parser_autoupdate_scheduler"
 SCHEDULER_LOCK_TTL = 90  # seconds
+
+# Parser-specific concurrency limit
+PARSER_MAX_CONCURRENCY = 5
+PARSER_COUNTER_KEY = "parser_jobs"
 
 
 logger = logging.getLogger("kitsu.parser.autoupdate")
@@ -106,8 +110,8 @@ class ParserAutoupdateScheduler:
                 )
 
         except (RedisError, ValueError) as exc:
-            logger.warning(
-                "[SCHEDULER] lock_acquire_failed lock_key=%s reason=redis_unavailable worker_id=%s error=%s",
+            logger.error(
+                "[SCHEDULER] start_failed lock_key=%s reason=redis_unavailable worker_id=%s error=%s",
                 SCHEDULER_LOCK_KEY,
                 self._worker_id,
                 exc,
@@ -153,15 +157,59 @@ class ParserAutoupdateScheduler:
 
     async def run_once(self, *, force: bool = False) -> dict[str, object]:
         """Run autoupdate once (for manual triggers or testing)."""
-        async with self._session_factory() as session:
-            settings = await get_parser_settings(session)
-            interval = resolve_update_interval_minutes(settings)
-            if not settings.enable_autoupdate and not force:
-                return {"status": "disabled", "interval_minutes": interval}
-            service = self._service_factory(session=session, settings=settings)
-            summary = await service.run(force=True)
-            summary["interval_minutes"] = interval
-            return summary
+        parser_acquired = False
+        try:
+            # Check parser concurrency limit
+            redis = await self._ensure_redis()
+            parser_counter = GlobalJobCounter(redis, PARSER_COUNTER_KEY, PARSER_MAX_CONCURRENCY)
+            
+            if not await parser_counter.try_acquire():
+                logger.error(
+                    "[PARSER] rejected reason=parser_limit_exceeded max=%d worker_id=%s",
+                    PARSER_MAX_CONCURRENCY,
+                    self._worker_id,
+                )
+                return {
+                    "status": "rejected",
+                    "reason": "parser_limit_exceeded",
+                    "max_concurrency": PARSER_MAX_CONCURRENCY,
+                }
+            
+            parser_acquired = True
+            
+            async with self._session_factory() as session:
+                settings = await get_parser_settings(session)
+                interval = resolve_update_interval_minutes(settings)
+                if not settings.enable_autoupdate and not force:
+                    return {"status": "disabled", "interval_minutes": interval}
+                service = self._service_factory(session=session, settings=settings)
+                summary = await service.run(force=True)
+                summary["interval_minutes"] = interval
+                return summary
+                
+        except (RedisError, ValueError) as exc:
+            logger.error(
+                "[PARSER] redis_error reason=redis_unavailable worker_id=%s error=%s",
+                self._worker_id,
+                exc,
+            )
+            return {
+                "status": "failed",
+                "reason": "redis_unavailable",
+            }
+        finally:
+            # Always release parser slot
+            if parser_acquired:
+                try:
+                    redis = await self._ensure_redis()
+                    parser_counter = GlobalJobCounter(redis, PARSER_COUNTER_KEY, PARSER_MAX_CONCURRENCY)
+                    await parser_counter.release()
+                except (RedisError, ValueError) as exc:
+                    logger.error(
+                        "[PARSER] counter_release_failed worker_id=%s error=%s",
+                        self._worker_id,
+                        exc,
+                    )
 
     async def _extend_lock_loop(self) -> None:
         """Periodically extend lock to prevent expiration."""

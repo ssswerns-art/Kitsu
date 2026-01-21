@@ -104,3 +104,116 @@ class DistributedLock:
                 exc,
             )
             return False
+
+
+class GlobalJobCounter:
+    """
+    Cluster-wide atomic counter for job concurrency limits.
+    Implements backpressure by enforcing max concurrent jobs.
+    """
+
+    def __init__(self, redis_client: AsyncRedis, counter_key: str, max_value: int):
+        """
+        Args:
+            redis_client: Async Redis client
+            counter_key: Unique key for this counter
+            max_value: Maximum allowed concurrent jobs
+        """
+        self._redis = redis_client
+        self._counter_key = f"counter:{counter_key}"
+        self._max_value = max_value
+
+    async def try_acquire(self) -> bool:
+        """
+        Attempt to acquire a job slot.
+        Returns True if acquired (counter incremented), False if limit reached or error.
+        """
+        try:
+            # Atomically increment only if current value < max_value
+            current = await self._redis.get(self._counter_key)
+            current_val = int(current) if current else 0
+            
+            if current_val >= self._max_value:
+                logger.debug(
+                    "Counter limit reached counter=%s current=%d max=%d",
+                    self._counter_key,
+                    current_val,
+                    self._max_value,
+                )
+                return False
+            
+            # Increment counter
+            new_val = await self._redis.incr(self._counter_key)
+            
+            # Double-check we didn't exceed limit due to race condition
+            if new_val > self._max_value:
+                # Rollback increment
+                await self._redis.decr(self._counter_key)
+                logger.debug(
+                    "Counter limit exceeded after increment counter=%s value=%d max=%d",
+                    self._counter_key,
+                    new_val,
+                    self._max_value,
+                )
+                return False
+            
+            logger.debug(
+                "Counter acquired counter=%s value=%d max=%d",
+                self._counter_key,
+                new_val,
+                self._max_value,
+            )
+            return True
+            
+        except RedisError as exc:
+            logger.error(
+                "Redis operation failed operation=INCR key=%s error=%s",
+                self._counter_key,
+                exc,
+            )
+            return False
+
+    async def release(self) -> bool:
+        """
+        Release a job slot by decrementing the counter.
+        Returns True if released, False on error.
+        """
+        try:
+            current = await self._redis.get(self._counter_key)
+            current_val = int(current) if current else 0
+            
+            if current_val <= 0:
+                logger.warning(
+                    "Counter already at zero counter=%s",
+                    self._counter_key,
+                )
+                return True
+            
+            new_val = await self._redis.decr(self._counter_key)
+            logger.debug(
+                "Counter released counter=%s value=%d",
+                self._counter_key,
+                new_val,
+            )
+            return True
+            
+        except RedisError as exc:
+            logger.error(
+                "Redis operation failed operation=DECR key=%s error=%s",
+                self._counter_key,
+                exc,
+            )
+            return False
+
+    async def get_current(self) -> int:
+        """Get current counter value."""
+        try:
+            current = await self._redis.get(self._counter_key)
+            return int(current) if current else 0
+        except RedisError as exc:
+            logger.error(
+                "Redis operation failed operation=GET key=%s error=%s",
+                self._counter_key,
+                exc,
+            )
+            return 0
