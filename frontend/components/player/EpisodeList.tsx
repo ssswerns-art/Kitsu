@@ -46,7 +46,7 @@ const EpisodeList = ({
   const totalEpisodes = episodes?.totalEpisodes ?? 0;
   const episodeById = useMemo(() => {
     const map = new Map<string, Episode>();
-    for (const episode of episodes?.episodes ?? []) {
+    for (const episode of episodes.episodes) {
       map.set(episode.episodeId, episode);
     }
     return map;

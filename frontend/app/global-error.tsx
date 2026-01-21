@@ -4,6 +4,12 @@ import { useEffect } from "react";
 import Link from "next/link";
 import { ROUTES } from "@/constants/routes";
 import { Button } from "@/components/ui/button";
+import {
+  getErrorHandlingStrategy,
+  logErrorByPolicy,
+  getUserFriendlyErrorMessage,
+} from "@/lib/error-boundary-policy";
+import { assertRenderMode } from "@/lib/render-mode";
 
 export default function GlobalError({
   error,
@@ -12,9 +18,18 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  // Declare render mode - client component
+  const RENDER_MODE = "client" as const;
+  assertRenderMode(RENDER_MODE);
+  
   useEffect(() => {
-    console.error(error);
+    // Use error handling policy to determine logging strategy
+    const strategy = getErrorHandlingStrategy(error);
+    logErrorByPolicy(error, strategy);
   }, [error]);
+
+  // Get user-friendly error message from policy
+  const errorMessage = getUserFriendlyErrorMessage(error);
 
   return (
     <html>
@@ -22,8 +37,7 @@ export default function GlobalError({
         <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-6 text-center">
           <h2 className="text-2xl font-semibold">Something went wrong</h2>
           <p className="max-w-md text-sm text-slate-300">
-            An unexpected error occurred. You can try again or return to the
-            homepage.
+            {errorMessage}
           </p>
           <div className="flex gap-3">
             <Button onClick={reset}>Try again</Button>

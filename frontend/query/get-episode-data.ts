@@ -1,39 +1,17 @@
 import { queryKeys } from "@/constants/query-keys";
 import { IEpisodeSource } from "@/types/episodes";
 import { useQuery } from "react-query";
-import { api } from "@/lib/api";
+import { ApiContractError } from "@/lib/api-errors";
+import { fetchEpisodeSources } from "@/external/proxy/proxy.adapter";
 
 const getEpisodeData = async (
   episodeId: string,
   server: string | undefined,
   subOrDub: string,
-) => {
-  const fallback: IEpisodeSource = {
-    headers: { Referer: "" },
-    tracks: [],
-    intro: { start: 0, end: 0 },
-    outro: { start: 0, end: 0 },
-    sources: [],
-    anilistID: 0,
-    malID: 0,
-  };
-
-  if (!episodeId) return fallback;
-
-  try {
-    const res = await api.get("/api/episode/sources", {
-      params: {
-        animeEpisodeId: decodeURIComponent(episodeId),
-        server: server,
-        category: subOrDub,
-      },
-      timeout: 10000,
-    });
-    return res.data.data as IEpisodeSource;
-  } catch (error) {
-    console.error("Failed to fetch episode data", error);
-    return fallback;
-  }
+): Promise<IEpisodeSource> => {
+  // Query layer calls ONLY adapter functions
+  // No knowledge of URLs, axios, retry logic, or external API contracts
+  return fetchEpisodeSources(episodeId, server, subOrDub);
 };
 
 export const useGetEpisodeData = (
@@ -48,5 +26,9 @@ export const useGetEpisodeData = (
     staleTime: 1000 * 60 * 3,
     enabled: Boolean(episodeId) && server !== "",
     retry: false,
+    useErrorBoundary: (error) => {
+      // Only use error boundary for contract errors
+      return error instanceof ApiContractError;
+    },
   });
 };

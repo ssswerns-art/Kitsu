@@ -53,26 +53,47 @@ def db_session():
 @pytest.fixture()
 def admin_router(monkeypatch: pytest.MonkeyPatch):
     dummy = types.ModuleType("app.dependencies")
+    
+    # Create a mock user
+    mock_user = types.SimpleNamespace()
+    mock_user.id = "test-user-id"
+    mock_user.role = "admin"
+    mock_user.is_admin = True
 
     async def get_db():  # pragma: no cover - stub
         yield None
 
     async def get_current_role():  # pragma: no cover - stub
         return "admin"
+    
+    async def get_current_user():  # pragma: no cover - stub
+        return mock_user
 
     dummy.get_db = get_db
     dummy.get_current_role = get_current_role
+    dummy.get_current_user = get_current_user
     monkeypatch.setitem(sys.modules, "app.dependencies", dummy)
     module = importlib.import_module("app.parser.admin.router")
     return importlib.reload(module)
 
 
-def test_admin_access_allows_admin() -> None:
-    assert "admin:*" in rbac.resolve_permissions("admin")
+def test_admin_access_allows_explicit_permissions() -> None:
+    """SECURITY-01: Admin should have explicit permissions, not wildcards."""
+    admin_perms = rbac.resolve_permissions("admin")
+    # No wildcards allowed
+    assert "admin:*" not in admin_perms
+    # But explicit admin permissions should be present
+    assert "admin.parser.settings" in admin_perms
+    assert "admin.parser.emergency" in admin_perms
+    assert "admin.parser.logs" in admin_perms
 
 
 def test_admin_access_denies_non_admin() -> None:
-    assert "admin:*" not in rbac.resolve_permissions("user")
+    """Non-admin users should not have admin permissions."""
+    user_perms = rbac.resolve_permissions("user")
+    assert "admin.parser.settings" not in user_perms
+    assert "admin.parser.emergency" not in user_perms
+    assert "admin.parser.logs" not in user_perms
 
 
 @pytest.mark.anyio

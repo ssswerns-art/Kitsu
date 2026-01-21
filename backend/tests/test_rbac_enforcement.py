@@ -19,6 +19,7 @@ from app.auth.helpers import require_any_permission, require_permission
 from app.dependencies import get_current_role, get_current_user, get_db
 from app.errors import PermissionError
 from app.routers import favorites, watch
+from app.main import handle_http_exception
 
 
 def make_request(path: str = "/favorites") -> Request:
@@ -127,6 +128,7 @@ def make_client(role: str, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     app = FastAPI()
     app.include_router(favorites.router)
     app.include_router(watch.router)
+    app.add_exception_handler(HTTPException, handle_http_exception)
     @app.post("/unlisted")
     async def create_unlisted() -> dict:
         return {"message": "ok"}
@@ -159,7 +161,7 @@ def test_delete_favorite_enforced_denies_guest(monkeypatch: pytest.MonkeyPatch) 
     client = make_client("guest", monkeypatch)
     response = client.delete(f"/favorites/{uuid.uuid4()}")
     assert response.status_code == status.HTTP_403_FORBIDDEN
-    assert response.json()["detail"] == PermissionError.message
+    assert response.json()["error"]["message"] == PermissionError.message
 
 
 def test_create_favorite_enforced_allows_user(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -175,7 +177,7 @@ def test_create_favorite_enforced_denies_guest(monkeypatch: pytest.MonkeyPatch) 
     payload = {"anime_id": str(uuid.uuid4())}
     response = client.post("/favorites/", json=payload)
     assert response.status_code == status.HTTP_403_FORBIDDEN
-    assert response.json()["detail"] == PermissionError.message
+    assert response.json()["error"]["message"] == PermissionError.message
 
 
 def test_watch_progress_enforced_allows_user(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -201,7 +203,7 @@ def test_watch_progress_enforced_denies_guest(monkeypatch: pytest.MonkeyPatch) -
     }
     response = client.post("/watch/progress", json=payload)
     assert response.status_code == status.HTTP_403_FORBIDDEN
-    assert response.json()["detail"] == PermissionError.message
+    assert response.json()["error"]["message"] == PermissionError.message
 def test_enforcement_matrix_scope_locked() -> None:
     expected_paths = {
         ("POST", "/favorites"),

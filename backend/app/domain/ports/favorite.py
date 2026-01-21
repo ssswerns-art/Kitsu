@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from typing import AsyncContextManager, Callable
 from datetime import datetime
 import uuid
-from typing import AsyncContextManager, Protocol
+from typing import Protocol
 
 
 class FavoriteData(Protocol):

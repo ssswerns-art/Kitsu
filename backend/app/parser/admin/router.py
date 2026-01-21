@@ -3,12 +3,14 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...auth.helpers import require_permission
-from ...dependencies import get_db
+from ...dependencies import get_db, get_current_user
+from ...models.user import User
+from ...services.audit.audit_service import AuditService
 from ..config import ParserSettings
 from ..services.autoupdate_service import ParserEpisodeAutoupdateService
 from ..services.publish_service import ParserPublishService, PublishNotFoundError
@@ -27,7 +29,11 @@ from ..tables import (
 from .schemas import (
     AnimeExternalRead,
     ParserDashboardRead,
+    ParserEmergencyStopRequest,
+    ParserJobLogRead,
+    ParserLogFilter,
     ParserMatchRequest,
+    ParserModeToggleRequest,
     ParserPublishAnimeRead,
     ParserPublishEpisodeRead,
     ParserPublishEpisodeRequest,
@@ -42,7 +48,6 @@ from .schemas import (
 router = APIRouter(
     prefix="/admin/parser",
     tags=["parser-admin"],
-    dependencies=[Depends(require_permission("admin:*"))],
 )
 
 
@@ -105,6 +110,7 @@ async def _get_settings_id(session: AsyncSession) -> int | None:
 @router.get("/dashboard", response_model=ParserDashboardRead)
 async def get_dashboard(
     session: AsyncSession = Depends(get_db),
+    _: None = Depends(require_permission("admin:parser.logs")),
 ) -> ParserDashboardRead:
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(hours=24)
@@ -157,6 +163,7 @@ async def list_anime_external(
     status_text: str | None = Query(default=None, alias="status"),
     search: str | None = Query(default=None),
     session: AsyncSession = Depends(get_db),
+    _: None = Depends(require_permission("admin:parser.logs")),
 ) -> list[AnimeExternalRead]:
     stmt = (
         select(
@@ -194,6 +201,7 @@ async def list_anime_external(
 async def match_anime_external(
     payload: ParserMatchRequest,
     session: AsyncSession = Depends(get_db),
+    _: None = Depends(require_permission("admin:parser.settings")),
 ) -> dict[str, str]:
     async with session.begin():
         result = await session.execute(
@@ -217,6 +225,7 @@ async def match_anime_external(
 async def unmatch_anime_external(
     payload: ParserUnmatchRequest,
     session: AsyncSession = Depends(get_db),
+    _: None = Depends(require_permission("admin:parser.settings")),
 ) -> dict[str, str]:
     async with session.begin():
         result = await session.execute(
@@ -240,7 +249,7 @@ async def unmatch_anime_external(
 async def publish_anime_external(
     external_id: int,
     session: AsyncSession = Depends(get_db),
-    _: None = Depends(require_permission("admin:*")),
+    _: None = Depends(require_permission("admin:parser.settings")),
 ) -> ParserPublishAnimeRead:
     service = ParserPublishService(session)
     try:
@@ -256,7 +265,7 @@ async def publish_anime_external(
 async def publish_episode_external(
     payload: ParserPublishEpisodeRequest,
     session: AsyncSession = Depends(get_db),
-    _: None = Depends(require_permission("admin:*")),
+    _: None = Depends(require_permission("admin:parser.settings")),
 ) -> ParserPublishEpisodeRead:
     service = ParserPublishService(session)
     try:
@@ -272,7 +281,7 @@ async def publish_episode_external(
 async def preview_publish_diff(
     external_id: int,
     session: AsyncSession = Depends(get_db),
-    _: None = Depends(require_permission("admin:*")),
+    _: None = Depends(require_permission("admin:parser.logs")),
 ) -> ParserPublishPreviewRead:
     service = ParserPublishService(session)
     try:
@@ -288,6 +297,7 @@ async def preview_publish_diff(
 async def run_parser_sync(
     payload: ParserRunRequest,
     session: AsyncSession = Depends(get_db),
+    _: None = Depends(require_permission("admin:parser.settings")),
 ) -> dict[str, object]:
     settings = await get_parser_settings(session)
     sources = set(payload.sources)
@@ -316,6 +326,7 @@ async def run_parser_sync(
 @router.post("/run/autoupdate")
 async def run_parser_autoupdate(
     session: AsyncSession = Depends(get_db),
+    _: None = Depends(require_permission("admin:parser.settings")),
 ) -> dict[str, object]:
     service = ParserEpisodeAutoupdateService(session=session)
     return await service.run(force=True)
@@ -324,6 +335,7 @@ async def run_parser_autoupdate(
 @router.get("/settings", response_model=ParserSettingsRead)
 async def get_settings(
     session: AsyncSession = Depends(get_db),
+    _: None = Depends(require_permission("admin:parser.settings")),
 ) -> ParserSettingsRead:
     settings = await get_parser_settings(session)
     return _settings_response(settings)
@@ -332,7 +344,10 @@ async def get_settings(
 @router.post("/settings", response_model=ParserSettingsRead)
 async def update_settings(
     payload: ParserSettingsUpdate,
+    request: Request,
     session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    _: None = Depends(require_permission("admin:parser.settings")),
 ) -> ParserSettingsRead:
     async with session.begin():
         current = await get_parser_settings(session)
@@ -350,4 +365,202 @@ async def update_settings(
                 .where(parser_settings.c.id == settings_id)
                 .values(values)
             )
+        
+        # Log settings update
+        audit_service = AuditService(session)
+        await audit_service.log_update(
+            entity_type="parser_settings",
+            entity_id=str(settings_id or 1),
+            before_data=current.model_dump(),
+            after_data=settings.model_dump(),
+            actor=current_user,
+            actor_type="user",
+            reason=None,
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+        )
     return _settings_response(settings)
+
+
+@router.post("/mode", response_model=dict[str, str])
+async def toggle_parser_mode(
+    payload: ParserModeToggleRequest,
+    request: Request,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    _: None = Depends(require_permission("admin:parser.settings")),
+) -> dict[str, str]:
+    """Toggle parser mode between manual and auto.
+    
+    Requires: admin:parser.settings permission
+    
+    Mode changes are logged to audit_logs.
+    """
+    async with session.begin():
+        current = await get_parser_settings(session)
+        settings_id = await _get_settings_id(session)
+        
+        if settings_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Parser settings not initialized"
+            )
+        
+        # Update mode
+        await session.execute(
+            update(parser_settings)
+            .where(parser_settings.c.id == settings_id)
+            .values(mode=payload.mode, updated_at=datetime.now(timezone.utc))
+        )
+        
+        # Log mode change
+        audit_service = AuditService(session)
+        await audit_service.log(
+            action="parser.mode_change",
+            entity_type="parser_settings",
+            entity_id=str(settings_id),
+            actor=current_user,
+            actor_type="user",
+            before={"mode": current.mode},
+            after={"mode": payload.mode},
+            reason=payload.reason,
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+        )
+    
+    return {"status": "success", "mode": payload.mode}
+
+
+@router.post("/emergency-stop", response_model=dict[str, str])
+async def emergency_stop_parser(
+    payload: ParserEmergencyStopRequest,
+    request: Request,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    _: None = Depends(require_permission("admin:parser.emergency")),
+) -> dict[str, str]:
+    """Emergency stop for parser.
+    
+    Requires: admin:parser.emergency permission
+    
+    Immediately stops active parser jobs and sets mode to manual.
+    Logged to audit_logs with WARNING level.
+    """
+    async with session.begin():
+        current = await get_parser_settings(session)
+        settings_id = await _get_settings_id(session)
+        
+        if settings_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Parser settings not initialized"
+            )
+        
+        # Set mode to manual
+        await session.execute(
+            update(parser_settings)
+            .where(parser_settings.c.id == settings_id)
+            .values(mode="manual", updated_at=datetime.now(timezone.utc))
+        )
+        
+        # Update running jobs to error status
+        await session.execute(
+            update(parser_jobs)
+            .where(parser_jobs.c.status == "running")
+            .values(
+                status="failed",
+                finished_at=datetime.now(timezone.utc),
+                error_summary="Emergency stop triggered by admin"
+            )
+        )
+        
+        # Log emergency stop with WARNING level
+        audit_service = AuditService(session)
+        await audit_service.log(
+            action="parser.emergency_stop",
+            entity_type="parser_settings",
+            entity_id=str(settings_id),
+            actor=current_user,
+            actor_type="user",
+            before={"mode": current.mode, "status": "running"},
+            after={"mode": "manual", "status": "stopped"},
+            reason=payload.reason,
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+        )
+    
+    return {"status": "stopped", "mode": "manual"}
+
+
+@router.get("/logs", response_model=list[ParserJobLogRead])
+async def get_parser_logs(
+    level: str | None = Query(default=None),
+    source: str | None = Query(default=None),
+    from_date: str | None = Query(default=None),
+    to_date: str | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    session: AsyncSession = Depends(get_db),
+    _: None = Depends(require_permission("admin:parser.logs")),
+) -> list[ParserJobLogRead]:
+    """Get parser logs with optional filters.
+    
+    Requires: admin:parser.logs permission
+    
+    Filters:
+    - level: error, warning, info
+    - source: parser source code
+    - from_date: ISO datetime
+    - to_date: ISO datetime
+    """
+    stmt = (
+        select(
+            parser_job_logs.c.id,
+            parser_job_logs.c.job_id,
+            parser_job_logs.c.level,
+            parser_job_logs.c.message,
+            parser_job_logs.c.created_at,
+        )
+        .select_from(parser_job_logs)
+        .order_by(parser_job_logs.c.created_at.desc())
+        .limit(limit)
+    )
+    
+    if level:
+        stmt = stmt.where(parser_job_logs.c.level == level)
+    
+    if from_date:
+        try:
+            from_dt = datetime.fromisoformat(from_date.replace('Z', '+00:00'))
+            stmt = stmt.where(parser_job_logs.c.created_at >= from_dt)
+        except ValueError:
+            pass
+    
+    if to_date:
+        try:
+            to_dt = datetime.fromisoformat(to_date.replace('Z', '+00:00'))
+            stmt = stmt.where(parser_job_logs.c.created_at <= to_dt)
+        except ValueError:
+            pass
+    
+    # If source filter is provided, join with parser_jobs and parser_sources
+    if source:
+        stmt = (
+            stmt
+            .join(parser_jobs, parser_job_logs.c.job_id == parser_jobs.c.id)
+            .join(parser_sources, parser_jobs.c.source_id == parser_sources.c.id)
+            .where(parser_sources.c.code == source)
+        )
+    
+    result = await session.execute(stmt)
+    rows = result.mappings().all()
+    
+    return [
+        ParserJobLogRead(
+            id=row["id"],
+            job_id=row["job_id"],
+            level=row["level"],
+            message=row["message"],
+            created_at=row["created_at"].isoformat(),
+        )
+        for row in rows
+    ]

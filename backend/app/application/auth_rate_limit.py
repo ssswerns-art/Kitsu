@@ -1,25 +1,13 @@
 import hashlib
 import time
-from redis import RedisError
-
-from ..infra.redis import get_redis_client
+from collections import defaultdict
+from typing import DefaultDict, List
 
 AUTH_RATE_LIMIT_MAX_ATTEMPTS = 5
 AUTH_RATE_LIMIT_WINDOW_SECONDS = 60
 RATE_LIMIT_MESSAGE = "Too many attempts, try again later"
 IDENTIFIER_HASH_LENGTH = 64
 IP_FALLBACK_LENGTH = 8
-
-# Lua script for atomic INCR + EXPIRE
-INCR_WITH_EXPIRE_SCRIPT = """
-local key = KEYS[1]
-local ttl = tonumber(ARGV[1])
-local count = redis.call('INCR', key)
-if count == 1 then
-    redis.call('EXPIRE', key, ttl)
-end
-return count
-"""
 
 
 class RateLimitExceededError(Exception):
@@ -30,54 +18,33 @@ class SoftRateLimiter:
     def __init__(self, max_attempts: int, window_seconds: int) -> None:
         self.max_attempts = max_attempts
         self.window_seconds = window_seconds
-        self._redis = get_redis_client()
-        # Register the Lua script
-        self._incr_script = self._redis.register_script(INCR_WITH_EXPIRE_SCRIPT)
+        self._attempts: DefaultDict[str, List[float]] = defaultdict(list)
 
-    def _make_redis_key(self, key: str) -> str:
-        """Prefix key for Redis namespace."""
-        return f"rate_limit:auth:{key}"
+    def _prune(self, key: str, now: float) -> List[float]:
+        cutoff = now - self.window_seconds
+        attempts = [ts for ts in self._attempts.get(key, []) if ts >= cutoff]
+        if attempts:
+            self._attempts[key] = attempts
+        else:
+            self._attempts.pop(key, None)
+        return attempts
 
     def is_limited(self, key: str, now: float | None = None) -> bool:
-        redis_key = self._make_redis_key(key)
-        try:
-            count = self._redis.get(redis_key)
-            if count is None:
-                return False
-            return int(count) >= self.max_attempts
-        except RedisError:
-            # Fail closed: if Redis is unavailable, block the request
-            return True
+        current = now or time.time()
+        attempts = self._prune(key, current)
+        return len(attempts) >= self.max_attempts
 
     def record_failure(self, key: str, now: float | None = None) -> None:
-        redis_key = self._make_redis_key(key)
-        try:
-            # Execute Lua script atomically
-            self._incr_script(keys=[redis_key], args=[self.window_seconds])
-        except RedisError:
-            # Fail closed: if we can't record, assume limit exceeded
-            pass
+        current = now or time.time()
+        attempts = self._prune(key, current)
+        attempts.append(current)
+        self._attempts[key] = attempts
 
     def reset(self, key: str) -> None:
-        redis_key = self._make_redis_key(key)
-        try:
-            self._redis.delete(redis_key)
-        except RedisError:
-            pass
+        self._attempts.pop(key, None)
 
     def clear(self) -> None:
-        """Clear all rate limit keys. For testing only."""
-        try:
-            # Scan and delete all rate limit keys
-            cursor = 0
-            while True:
-                cursor, keys = self._redis.scan(cursor, match="rate_limit:auth:*", count=100)
-                if keys:
-                    self._redis.delete(*keys)
-                if cursor == 0:
-                    break
-        except RedisError:
-            pass
+        self._attempts.clear()
 
 
 def _make_key(scope: str, identifier: str, client_ip: str | None) -> str:

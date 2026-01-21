@@ -1,18 +1,13 @@
 import { queryKeys } from "@/constants/query-keys";
-import { api } from "@/lib/api";
 import { IAnimeSchedule } from "@/types/anime-schedule";
 import { useQuery } from "react-query";
+import { ApiContractError } from "@/lib/api-errors";
+import { fetchAnimeSchedule } from "@/external/proxy/proxy.adapter";
 
-const getAnimeSchedule = async (date: string) => {
-  const queryParams = date ? `?date=${date}` : "";
-
-  try {
-    const res = await api.get("/api/schedule" + queryParams, { timeout: 10000 });
-    return res.data.data as IAnimeSchedule;
-  } catch (error) {
-    console.error("Failed to fetch schedule", error);
-    return { scheduledAnimes: [] } as IAnimeSchedule;
-  }
+const getAnimeSchedule = async (date: string): Promise<IAnimeSchedule> => {
+  // Query layer calls ONLY adapter functions
+  // No knowledge of URLs, axios, retry logic, or external API contracts
+  return fetchAnimeSchedule(date);
 };
 
 export const useGetAnimeSchedule = (
@@ -26,5 +21,9 @@ export const useGetAnimeSchedule = (
     refetchOnWindowFocus: false,
     staleTime: 1000 * 60 * 5,
     enabled: options?.enabled ?? true,
+    useErrorBoundary: (error) => {
+      // Only use error boundary for contract errors
+      return error instanceof ApiContractError;
+    },
   });
 };

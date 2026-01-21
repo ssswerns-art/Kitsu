@@ -34,7 +34,7 @@ type BackendAnime = {
 type ContinueWatchingItem = {
   id: string;
   title: string;
-  poster: string;
+  poster: string; // Always non-null due to PLACEHOLDER_POSTER fallback
   episode: number;
   progressPercent: number;
   isCompleted: boolean;
@@ -84,43 +84,34 @@ const ContinueWatching = () => {
       setIsLoading(true);
 
       if (isAuthenticated) {
-        try {
-          const response = await api.get<ContinueWatchingResponse[]>(
-            "/watch/continue",
-            { params: { limit: displayLimit } },
-          );
-          const items = response.data || [];
-          const detailed = await Promise.all(
-            items.map(async (item) => {
-              try {
-                const animeResponse = await api.get<BackendAnime>(
-                  `/anime/${item.anime_id}`,
-                );
-                return { item, anime: animeResponse.data };
-              } catch (error) {
-                console.error("Failed to load anime details", error);
-                return { item, anime: null };
-              }
-            }),
-          );
-
-          resolved = detailed.map(({ item, anime }) => {
-            const { progressPercent, isCompleted } = resolveProgress(
-              item.progress_percent,
+        const response = await api.get<ContinueWatchingResponse[]>(
+          "/watch/continue",
+          { params: { limit: displayLimit } },
+        );
+        const items = response.data;
+        const detailed = await Promise.all(
+          items.map(async (item) => {
+            const animeResponse = await api.get<BackendAnime>(
+              `/anime/${item.anime_id}`,
             );
-            return {
-              id: item.anime_id,
-              title: anime?.title || "",
-              poster: anime?.poster || PLACEHOLDER_POSTER,
-              episode: item.episode,
-              progressPercent,
-              isCompleted,
-            };
-          });
-        } catch (error) {
-          console.error("Failed to load continue watching", error);
-          resolved = [];
-        }
+            return { item, anime: animeResponse.data };
+          }),
+        );
+
+        resolved = detailed.map(({ item, anime }) => {
+          const { progressPercent, isCompleted } = resolveProgress(
+            item.progress_percent,
+          );
+          return {
+            id: item.anime_id,
+            title: anime.title,
+            // Fallback to placeholder for missing posters (UI concern, not API contract violation)
+            poster: anime.poster || PLACEHOLDER_POSTER,
+            episode: item.episode,
+            progressPercent,
+            isCompleted,
+          };
+        });
       } else {
         const watchedAnimes: {
           anime: { id: string; title: string; poster: string };

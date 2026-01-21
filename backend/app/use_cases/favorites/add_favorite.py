@@ -1,9 +1,7 @@
-import logging
 import uuid
 from datetime import datetime, timezone
 
 from ...background import Job, default_job_runner
-from ...domain.invariants import validate_referential_integrity_anime
 from ...domain.ports.favorite import (
     FavoriteData,
     FavoriteRepository,
@@ -11,8 +9,6 @@ from ...domain.ports.favorite import (
 )
 from ...errors import ConflictError, NotFoundError
 from ...schemas.favorite import FavoriteRead
-
-logger = logging.getLogger(__name__)
 
 async def get_anime_by_id(
     favorite_repo: FavoriteRepository, anime_id: uuid.UUID
@@ -25,6 +21,10 @@ async def get_favorite(
     return await favorite_repo.get(user_id, anime_id)
 
 
+def _favorite_id_for(user_id: uuid.UUID, anime_id: uuid.UUID) -> uuid.UUID:
+    return uuid.uuid5(uuid.NAMESPACE_URL, f"kitsu.favorite:{user_id}:{anime_id}")
+
+
 async def _apply_add_favorite(
     favorite_repo: FavoriteRepository,
     user_id: uuid.UUID,
@@ -32,52 +32,20 @@ async def _apply_add_favorite(
     favorite_id: uuid.UUID,
     created_at: datetime,
 ) -> None:
-    """
-    Apply add favorite operation with exactly-once semantics and domain invariants.
-    
-    IDEMPOTENCY KEY: (user_id, anime_id)
-    INVARIANT: Repeated execution either creates favorite OR skips if exists.
-    
-    DOMAIN INVARIANTS ENFORCED:
-    - INVARIANT-3: Referential integrity (anime must exist)
-    """
     try:
-        # INVARIANT-3: Referential integrity - anime must exist
         anime_exists = await get_anime_by_id(favorite_repo, anime_id)
-        validate_referential_integrity_anime(
-            anime_exists,
-            anime_id=anime_id,
-            operation="add favorite",
-        )
+        if not anime_exists:
+            raise NotFoundError("Anime not found")
 
-        # IDEMPOTENCY CHECK: Check if effect already applied
         existing = await get_favorite(favorite_repo, user_id, anime_id)
         if existing is None:
-            # Effect not applied - apply it atomically
             await favorite_repo.add(
                 user_id,
                 anime_id,
                 favorite_id=favorite_id,
                 created_at=created_at,
             )
-            await favorite_repo.commit()
-            logger.info(
-                "operation=favorite:add action=create user_id=%s anime_id=%s favorite_id=%s",
-                user_id,
-                anime_id,
-                favorite_id,
-            )
-        else:
-            # Effect already applied - idempotent skip
-            logger.info(
-                "idempotent_skip operation=favorite:add user_id=%s anime_id=%s "
-                "reason=already_exists existing_id=%s",
-                user_id,
-                anime_id,
-                existing.id,
-            )
-            # Commit to ensure transaction completes cleanly
-            await favorite_repo.commit()
+        await favorite_repo.commit()
     except Exception:
         await favorite_repo.rollback()
         raise
@@ -115,7 +83,7 @@ async def add_favorite(
     if existing:
         raise ConflictError("Favorite already exists")
 
-    favorite_id = uuid.uuid4()
+    favorite_id = _favorite_id_for(user_id, anime_id)
     created_at = datetime.now(timezone.utc)
     result = FavoriteRead(id=favorite_id, anime_id=anime_id, created_at=created_at)
 
