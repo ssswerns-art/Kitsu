@@ -28,6 +28,21 @@ SCHEDULER_LOCK_TTL = 90  # seconds
 PARSER_MAX_CONCURRENCY = 5
 PARSER_COUNTER_KEY = "counter:parser_jobs"
 
+# ARCHITECTURAL DECISION: Parser autoupdate is BEST_EFFORT
+#
+# WHY: Parser jobs are background sync tasks that:
+# 1. Do NOT affect user-facing operations or critical paths
+# 2. Can be safely skipped under system overload
+# 3. Will naturally retry on next scheduled run
+# 4. Must NEVER block or delay critical user operations (watch progress, favorites)
+#
+# BEHAVIOR:
+# - Single attempt only (no retry on failure)
+# - Dropped (not failed) when parser concurrency limit exceeded
+# - Dropped (not failed) when Redis unavailable
+# - Warning-level logging (not error) for drops
+# - Never consumes global job counter slots that could block CRITICAL jobs
+
 
 logger = logging.getLogger("kitsu.parser.autoupdate")
 
@@ -156,7 +171,15 @@ class ParserAutoupdateScheduler:
             self._lock = None
 
     async def run_once(self, *, force: bool = False) -> dict[str, object]:
-        """Run autoupdate once (for manual triggers or testing)."""
+        """
+        Run autoupdate once (for manual triggers or testing).
+        
+        FAILURE BOUNDARY: Parser autoupdate is ALWAYS BEST_EFFORT
+        - Can be dropped under parser concurrency limit
+        - Can be dropped on Redis unavailability
+        - Single attempt only, no retry
+        - Explicit logging of all drop/reject decisions
+        """
         running_incremented = False
         try:
             # Gate check: can we start this parser job right now?
@@ -167,33 +190,40 @@ class ParserAutoupdateScheduler:
                 current_running = int(current) if current else 0
                 
                 if current_running >= PARSER_MAX_CONCURRENCY:
-                    # Limit exceeded - reject parser job
-                    logger.error(
-                        "[PARSER] rejected reason=parser_limit_exceeded current=%d max=%d worker_id=%s",
+                    # Limit exceeded - DROP (best_effort behavior)
+                    logger.warning(
+                        "[PARSER] dropped criticality=best_effort reason=parser_limit_exceeded current=%d max=%d worker_id=%s",
                         current_running,
                         PARSER_MAX_CONCURRENCY,
                         self._worker_id,
                     )
                     return {
-                        "status": "rejected",
+                        "status": "dropped",
                         "reason": "parser_limit_exceeded",
+                        "criticality": "best_effort",
                         "max_concurrency": PARSER_MAX_CONCURRENCY,
                     }
             except (RedisError, ValueError) as exc:
-                # Redis unavailable - reject parser job
-                logger.error(
-                    "[PARSER] rejected reason=redis_unavailable worker_id=%s error=%s",
+                # Redis unavailable - DROP (best_effort behavior)
+                logger.warning(
+                    "[PARSER] dropped criticality=best_effort reason=redis_unavailable worker_id=%s error=%s",
                     self._worker_id,
                     exc,
                 )
                 return {
-                    "status": "failed",
+                    "status": "dropped",
                     "reason": "redis_unavailable",
+                    "criticality": "best_effort",
                 }
             
             # Increment counter immediately before parser job starts
             await redis.incr(PARSER_COUNTER_KEY)
             running_incremented = True
+            
+            logger.info(
+                "[PARSER] started criticality=best_effort worker_id=%s",
+                self._worker_id,
+            )
             
             async with self._session_factory() as session:
                 settings = await get_parser_settings(session)
@@ -203,17 +233,37 @@ class ParserAutoupdateScheduler:
                 service = self._service_factory(session=session, settings=settings)
                 summary = await service.run(force=True)
                 summary["interval_minutes"] = interval
+                summary["criticality"] = "best_effort"
+                
+                logger.info(
+                    "[PARSER] succeeded criticality=best_effort worker_id=%s",
+                    self._worker_id,
+                )
                 return summary
                 
         except (RedisError, ValueError) as exc:
-            logger.error(
-                "[PARSER] redis_error reason=redis_unavailable worker_id=%s error=%s",
+            # Redis error during execution - LOG and FAIL (best_effort)
+            logger.warning(
+                "[PARSER] failed criticality=best_effort reason=redis_error worker_id=%s error=%s",
                 self._worker_id,
                 exc,
             )
             return {
                 "status": "failed",
-                "reason": "redis_unavailable",
+                "reason": "redis_error",
+                "criticality": "best_effort",
+            }
+        except Exception as exc:  # noqa: BLE001
+            # Business logic error - LOG and FAIL (best_effort, no retry)
+            logger.error(
+                "[PARSER] failed criticality=best_effort reason=execution_error worker_id=%s",
+                self._worker_id,
+                exc_info=exc,
+            )
+            return {
+                "status": "failed",
+                "reason": "execution_error",
+                "criticality": "best_effort",
             }
         finally:
             # Always decrement counter for parser jobs that started running
@@ -223,7 +273,7 @@ class ParserAutoupdateScheduler:
                     await redis.decr(PARSER_COUNTER_KEY)
                 except (RedisError, ValueError) as exc:
                     logger.error(
-                        "[PARSER] counter_decrement_failed worker_id=%s error=%s",
+                        "[PARSER] counter_decrement_failed criticality=best_effort worker_id=%s error=%s",
                         self._worker_id,
                         exc,
                     )
