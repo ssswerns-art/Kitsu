@@ -18,6 +18,7 @@ import { Sheet, SheetClose, SheetContent, SheetTrigger } from "./ui/sheet";
 import LoginPopoverButton from "./login-popover-button";
 import { useAuthSelector } from "@/store/auth-store";
 import NavbarAvatar from "./navbar-avatar";
+import { ThemeToggle } from "./theme-toggle";
 
 const menuItems: Array<{ title: string; href?: string }> = [
   // {
@@ -46,17 +47,17 @@ const NavBar = () => {
     <div
       className={cn([
         "h-fit w-full",
-        "sticky top-0 z-[100] duration-300",
-        isHeaderFixed ? "fixed bg-gradient-to-b from-slate-700" : "",
+        "sticky top-0 z-[100] transition-all duration-300",
+        isHeaderFixed ? "fixed bg-gradient-to-b from-background/80" : "",
         isHeaderSticky
-          ? "bg-clip-padding backdrop-filter backdrop-blur-md bg-opacity-10 bg-slate-900"
+          ? "bg-clip-padding backdrop-filter backdrop-blur-xl bg-background/70 shadow-lg border-b border-border/50"
           : "",
       ])}
     >
       <Container className="flex items-center justify-between py-2 gap-20 ">
         <Link
           href={ROUTES.HOME}
-          className="flex items-center gap-1 cursor-pointer"
+          className="flex items-center gap-1 cursor-pointer group"
         >
           <Image
             src="/icon.png"
@@ -65,11 +66,12 @@ const NavBar = () => {
             height={70}
             priority
             suppressHydrationWarning
+            className="transition-transform duration-300 group-hover:scale-110"
           />
           <h1
             className={cn([
               nightTokyo.className,
-              "text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-gray-200 to-pink-600 tracking-widest",
+              "text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-foreground via-primary to-primary tracking-widest transition-all duration-300 group-hover:tracking-wide",
             ])}
           >
             Kitsunee
@@ -77,20 +79,26 @@ const NavBar = () => {
         </Link>
         <div className="hidden lg:flex items-center gap-10 ml-20">
           {menuItems.map((menu, idx) => (
-            <Link href={menu.href || "#"} key={idx}>
+            <Link 
+              href={menu.href || "#"} 
+              key={idx}
+              className="text-foreground/80 hover:text-primary transition-colors duration-200 font-medium"
+            >
               {menu.title}
             </Link>
           ))}
         </div>
-        <div className="w-1/3 hidden lg:flex items-center gap-5">
+        <div className="w-1/3 hidden lg:flex items-center gap-3">
           <SearchBar />
+          <ThemeToggle />
           {auth ? (
             <NavbarAvatar auth={auth} clearAuth={clearAuth} />
           ) : (
             <LoginPopoverButton />
           )}
         </div>
-        <div className="lg:hidden flex items-center gap-5">
+        <div className="lg:hidden flex items-center gap-3">
+          <ThemeToggle />
           <MobileMenuSheet trigger={<MenuIcon suppressHydrationWarning />} />
           {auth ? (
             <NavbarAvatar auth={auth} clearAuth={clearAuth} />
@@ -124,6 +132,7 @@ const MobileMenuSheet = ({ trigger }: { trigger: ReactNode }) => {
                 href={menu.href || "#"}
                 key={idx}
                 onClick={() => setOpen(false)}
+                className="text-foreground/80 hover:text-primary transition-colors duration-200 font-medium text-lg"
               >
                 {menu.title}
               </Link>
