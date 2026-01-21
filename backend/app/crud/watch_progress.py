@@ -2,6 +2,8 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..domain.ports.watch_progress import (
@@ -10,6 +12,14 @@ from ..domain.ports.watch_progress import (
 )
 from ..models.anime import Anime
 from ..models.watch_progress import WatchProgress
+
+
+def _insert_for(session: AsyncSession):
+    bind = session.get_bind()
+    dialect = bind.dialect.name if bind is not None else "postgresql"
+    if dialect == "sqlite":
+        return sqlite_insert
+    return pg_insert
 
 
 async def get_watch_progress(
@@ -33,20 +43,40 @@ async def create_watch_progress(
     created_at: datetime | None = None,
     last_watched_at: datetime | None = None,
 ) -> WatchProgress:
-    progress = WatchProgress(
-        id=progress_id or uuid.uuid4(),
-        user_id=user_id,
-        anime_id=anime_id,
-        episode=episode,
-        position_seconds=position_seconds,
-        progress_percent=progress_percent,
-    )
+    values = {
+        "id": progress_id or uuid.uuid4(),
+        "user_id": user_id,
+        "anime_id": anime_id,
+        "episode": episode,
+        "position_seconds": position_seconds,
+        "progress_percent": progress_percent,
+    }
     if created_at is not None:
-        progress.created_at = created_at
+        values["created_at"] = created_at
     if last_watched_at is not None:
-        progress.last_watched_at = last_watched_at
-    session.add(progress)
-    await session.flush()
+        values["last_watched_at"] = last_watched_at
+    insert_fn = _insert_for(session)
+    stmt = insert_fn(WatchProgress).values(**values)
+    update_values = {
+        "episode": stmt.excluded.episode,
+        "position_seconds": stmt.excluded.position_seconds,
+        "progress_percent": stmt.excluded.progress_percent,
+        "last_watched_at": (
+            stmt.excluded.last_watched_at
+            if last_watched_at is not None
+            else WatchProgress.last_watched_at
+        ),
+    }
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["user_id", "anime_id"],
+        set_=update_values,
+    )
+    await session.execute(stmt)
+    progress = await get_watch_progress(session, user_id, anime_id)
+    if progress is None:
+        raise RuntimeError(
+            f"Watch progress upsert did not return a row for user={user_id} anime={anime_id}"
+        )
     return progress
 
 

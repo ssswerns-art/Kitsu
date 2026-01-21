@@ -101,16 +101,41 @@ def db_session():
 @pytest.fixture()
 def admin_router(monkeypatch: pytest.MonkeyPatch):
     dummy = types.ModuleType("app.dependencies")
+    audit_module = types.ModuleType("app.services.audit.audit_service")
+    
+    # Create a mock user
+    mock_user = types.SimpleNamespace()
+    mock_user.id = "test-user-id"
+    mock_user.role = "admin"
+    mock_user.is_admin = True
 
     async def get_db():  # pragma: no cover - stub
         yield None
 
     async def get_current_role():  # pragma: no cover - stub
         return "admin"
+    
+    async def get_current_user():  # pragma: no cover - stub
+        return mock_user
+    
+    # Mock AuditService
+    class MockAuditService:
+        def __init__(self, session):
+            self.session = session
+        
+        async def log(self, *args, **kwargs):
+            pass
+        
+        async def log_update(self, *args, **kwargs):
+            pass
 
     dummy.get_db = get_db
     dummy.get_current_role = get_current_role
+    dummy.get_current_user = get_current_user
+    audit_module.AuditService = MockAuditService
+    
     monkeypatch.setitem(sys.modules, "app.dependencies", dummy)
+    monkeypatch.setitem(sys.modules, "app.services.audit.audit_service", audit_module)
     module = importlib.import_module("app.parser.admin.router")
     return importlib.reload(module)
 
@@ -118,6 +143,17 @@ def admin_router(monkeypatch: pytest.MonkeyPatch):
 @pytest.mark.anyio
 async def test_settings_save_and_reload(db_session, admin_router) -> None:
     adapter, session = db_session
+    
+    # Create a mock request object
+    mock_request = types.SimpleNamespace()
+    mock_request.client = types.SimpleNamespace()
+    mock_request.client.host = "127.0.0.1"
+    mock_request.headers = {"user-agent": "test-agent"}
+    
+    # Create a mock user
+    mock_user = types.SimpleNamespace()
+    mock_user.id = "test-user-id"
+    
     payload = ParserSettingsUpdate(
         allowed_translations=["AniLibria"],
         allowed_translation_types=["voice"],
@@ -131,7 +167,13 @@ async def test_settings_save_and_reload(db_session, admin_router) -> None:
         dry_run_default=False,
     )
 
-    settings = await admin_router.update_settings(payload, session=adapter)
+    settings = await admin_router.update_settings(
+        payload, 
+        request=mock_request,
+        session=adapter,
+        current_user=mock_user,
+        _=None
+    )
 
     assert settings.autopublish_enabled is False
     assert settings.stage_only is True

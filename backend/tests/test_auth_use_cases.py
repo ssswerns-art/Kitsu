@@ -84,6 +84,13 @@ class FakeTokenPort:
         self.last_hash = token_hash
         return self.stored_token
 
+    async def get_by_user_id(
+        self, user_id: uuid.UUID, *, for_update: bool = False
+    ) -> FakeRefreshToken | None:
+        if self.stored_token and self.stored_token.user_id == user_id:
+            return self.stored_token
+        return None
+
     async def revoke(self, user_id: uuid.UUID) -> FakeRefreshToken | None:
         self.revoked_user_id = user_id
         if self.stored_token:
@@ -179,4 +186,15 @@ async def test_logout_user_revokes_token() -> None:
     await logout_user(token_port, "refresh-token")
 
     assert token_port.revoked_user_id == stored_token.user_id
+    assert token_port.committed is True
+
+
+@pytest.mark.anyio
+async def test_logout_user_uses_user_id_when_token_missing() -> None:
+    user_id = uuid.uuid4()
+    token_port = FakeTokenPort()
+
+    await logout_user(token_port, "missing-token", user_id=user_id)
+
+    assert token_port.revoked_user_id == user_id
     assert token_port.committed is True

@@ -2,11 +2,21 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..domain.ports.favorite import FavoriteData, FavoriteRepository as FavoriteRepositoryPort
 from ..models.anime import Anime
 from ..models.favorite import Favorite
+
+
+def _insert_for(session: AsyncSession):
+    bind = session.get_bind()
+    dialect = bind.dialect.name if bind is not None else "postgresql"
+    if dialect == "sqlite":
+        return sqlite_insert
+    return pg_insert
 
 
 async def get_favorite(
@@ -26,15 +36,25 @@ async def add_favorite(
     favorite_id: uuid.UUID | None = None,
     created_at: datetime | None = None,
 ) -> Favorite:
-    favorite = Favorite(
-        id=favorite_id or uuid.uuid4(),
-        user_id=user_id,
-        anime_id=anime_id,
-    )
+    values = {
+        "id": favorite_id or uuid.uuid4(),
+        "user_id": user_id,
+        "anime_id": anime_id,
+    }
     if created_at is not None:
-        favorite.created_at = created_at
-    session.add(favorite)
-    await session.flush()
+        values["created_at"] = created_at
+    insert_fn = _insert_for(session)
+    stmt = insert_fn(Favorite).values(**values)
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["user_id", "anime_id"],
+        set_={"created_at": Favorite.created_at},
+    )
+    await session.execute(stmt)
+    favorite = await get_favorite(session, user_id, anime_id)
+    if favorite is None:
+        raise RuntimeError(
+            f"Favorite upsert did not return a row for user={user_id} anime={anime_id}"
+        )
     return favorite
 
 

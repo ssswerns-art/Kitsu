@@ -205,7 +205,7 @@ function KitsunePlayer({
     skipTimesRef.current.outroEnd = outroEnd; // Store the raw value
 
     // Subtitle Track Selector Options
-    const trackOptions: any = (episodeInfo?.tracks ?? []).map((track) => ({
+    const trackOptions: any = episodeInfo.tracks.map((track) => ({
       default: track.lang === "English", // Example default logic
       html: track.lang,
       url: `${proxyBaseURI}?url=${encodeURIComponent(track.url)}`,

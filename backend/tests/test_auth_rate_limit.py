@@ -86,7 +86,7 @@ def test_login_rate_limit_exceeded(monkeypatch: pytest.MonkeyPatch) -> None:
     response = client.post("/auth/login", json=payload)
 
     assert response.status_code == status.HTTP_429_TOO_MANY_REQUESTS
-    assert response.json()["code"] == "RATE_LIMITED"
+    assert response.json()["error"]["code"] == "RATE_LIMITED"
 
 
 def test_login_success_resets_limit(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -116,7 +116,7 @@ def test_login_success_resets_limit(monkeypatch: pytest.MonkeyPatch) -> None:
 
     response = client.post("/auth/login", json=payload)
     assert response.status_code == status.HTTP_429_TOO_MANY_REQUESTS
-    assert response.json()["code"] == "RATE_LIMITED"
+    assert response.json()["error"]["code"] == "RATE_LIMITED"
 
 
 def test_refresh_rate_limit_exceeded(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -133,4 +133,4 @@ def test_refresh_rate_limit_exceeded(monkeypatch: pytest.MonkeyPatch) -> None:
     response = client.post("/auth/refresh", json=payload)
 
     assert response.status_code == status.HTTP_429_TOO_MANY_REQUESTS
-    assert response.json()["code"] == "RATE_LIMITED"
+    assert response.json()["error"]["code"] == "RATE_LIMITED"

@@ -4,6 +4,7 @@ import httpx
 from fastapi import FastAPI, status
 from fastapi.testclient import TestClient
 import pytest
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 # Ensure required environment variables are present for module imports.
 os.environ.setdefault("SECRET_KEY", "test")
@@ -13,6 +14,7 @@ os.environ.setdefault(
 )
 
 from app.api.router import router  # noqa: E402
+from app.main import handle_http_exception  # noqa: E402
 
 
 class DummyClient:
@@ -39,6 +41,7 @@ def make_status_error(code: int) -> httpx.HTTPStatusError:
 def make_app() -> TestClient:
     app = FastAPI()
     app.include_router(router)
+    app.add_exception_handler(StarletteHTTPException, handle_http_exception)
     return TestClient(app)
 
 
@@ -52,7 +55,7 @@ def test_search_suggestion_upstream_404(monkeypatch: pytest.MonkeyPatch) -> None
     response = client.get("/api/search/suggestion", params={"q": "naruto"})
 
     assert response.status_code == status.HTTP_404_NOT_FOUND
-    assert response.json()["detail"] == "Upstream request was rejected"
+    assert response.json()["error"]["message"] == "Upstream request was rejected"
 
 
 def test_anime_info_upstream_500(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -65,7 +68,7 @@ def test_anime_info_upstream_500(monkeypatch: pytest.MonkeyPatch) -> None:
     response = client.get("/api/anime/any-slug")
 
     assert response.status_code == status.HTTP_502_BAD_GATEWAY
-    assert response.json()["detail"] == "Upstream service unavailable"
+    assert response.json()["error"]["message"] == "Upstream service unavailable"
 
 
 def test_anime_episodes_network_error(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -79,4 +82,4 @@ def test_anime_episodes_network_error(monkeypatch: pytest.MonkeyPatch) -> None:
     response = client.get("/api/anime/any-slug/episodes")
 
     assert response.status_code == status.HTTP_502_BAD_GATEWAY
-    assert response.json()["detail"] == "Upstream service unavailable"
+    assert response.json()["error"]["message"] == "Upstream service unavailable"

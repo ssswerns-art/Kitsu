@@ -1,6 +1,7 @@
 import { queryKeys } from "@/constants/query-keys";
-import { api } from "@/lib/api";
 import { useQuery } from "react-query";
+import { ApiContractError } from "@/lib/api-errors";
+import { fetchAnimeBanner } from "@/external/anilist/anilist.adapter";
 
 interface IAnimeBanner {
   Media: {
@@ -9,30 +10,10 @@ interface IAnimeBanner {
   };
 }
 
-const getAnimeBanner = async (anilistID: number) => {
-  try {
-    const res = await api.post(
-      "https://graphql.anilist.co",
-      {
-        query: `
-      query ($id: Int) {
-        Media(id: $id, type: ANIME) {
-          id
-          bannerImage
-        }
-      }
-    `,
-        variables: {
-          id: anilistID,
-        },
-      },
-      { timeout: 10000 },
-    );
-    return res.data.data as IAnimeBanner;
-  } catch (error) {
-    console.error("Failed to fetch anime banner", error);
-    return { Media: { id: anilistID, bannerImage: "" } } as IAnimeBanner;
-  }
+const getAnimeBanner = async (anilistID: number): Promise<IAnimeBanner> => {
+  // Query layer calls ONLY adapter functions
+  // No knowledge of GraphQL, axios, retry logic, or external API contracts
+  return fetchAnimeBanner(anilistID);
 };
 
 export const useGetAnimeBanner = (anilistID: number) => {
@@ -43,5 +24,9 @@ export const useGetAnimeBanner = (anilistID: number) => {
     staleTime: 1000 * 60 * 60,
     refetchOnWindowFocus: false,
     retry: false,
+    useErrorBoundary: (error) => {
+      // Only use error boundary for contract errors
+      return error instanceof ApiContractError;
+    },
   });
 };

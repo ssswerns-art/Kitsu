@@ -75,8 +75,12 @@ ERROR_CODE_BY_STATUS: dict[int, str] = {
 }
 
 
-def error_payload(code: str, message: str, details: Any | None = None) -> dict[str, Any]:
-    return {"code": code, "message": message, "details": details}
+def error_payload(
+    code: str,
+    message: str,
+    details: Any | None = None,
+) -> dict[str, Any]:
+    return {"error": {"code": code, "message": message, "details": details}}
 
 
 def resolve_error_code(status_code: int) -> str:

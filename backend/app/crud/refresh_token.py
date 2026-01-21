@@ -44,6 +44,17 @@ async def get_refresh_token_by_hash(
     return result.scalars().first()
 
 
+async def get_refresh_token_by_user_id(
+    session: AsyncSession, user_id: uuid.UUID, *, for_update: bool = False
+) -> RefreshToken | None:
+    stmt = select(RefreshToken).where(RefreshToken.user_id == user_id)
+    if for_update:
+        stmt = stmt.with_for_update()
+
+    result = await session.execute(stmt)
+    return result.scalars().first()
+
+
 async def revoke_refresh_token(
     session: AsyncSession, user_id: uuid.UUID
 ) -> RefreshToken | None:
@@ -73,6 +84,13 @@ class RefreshTokenRepository(RefreshTokenPort):
     ) -> RefreshTokenData | None:
         return await get_refresh_token_by_hash(
             self._session, token_hash, for_update=for_update
+        )
+
+    async def get_by_user_id(
+        self, user_id: uuid.UUID, *, for_update: bool = False
+    ) -> RefreshTokenData | None:
+        return await get_refresh_token_by_user_id(
+            self._session, user_id, for_update=for_update
         )
 
     async def revoke(self, user_id: uuid.UUID) -> RefreshTokenData | None:

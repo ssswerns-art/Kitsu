@@ -149,7 +149,7 @@ const SearchResults = () => {
           <ToggleGroup
             type="multiple"
             className="flex flex-wrap justify-start gap-2 mt-4"
-            value={filters.genres?.split(",") || []}
+            value={filters.genres?.split(",") || []} // Fallback for undefined URL param (not API data)
             onValueChange={(value) => {
               onChange("genres", value.filter(Boolean).join(","));
             }}
@@ -162,7 +162,7 @@ const SearchResults = () => {
                 className={cn(
                   "border border-slate-700 hover:border-[#e9376b] hover:text-[#e9376b] hover:bg-transparent",
                   "data-[state=on]:border-[#e9376b] data-[state=on]:text-white data-[state=on]:bg-[#e9376b]",
-                  filters.genres?.split(",").includes(genre.value)
+                  (filters.genres?.split(",") || []).includes(genre.value)
                     ? "bg-[#e9376b] text-white"
                     : "text-slate-300",
                 )}

@@ -62,19 +62,14 @@ const Page = () => {
   useEffect(() => {
     const loadFavorites = async () => {
       if (!auth || !slugParam) return;
-      try {
-        const res = await api.get("/favorites");
-        const match = (res.data as any[])?.find(
-          (fav) => fav.anime_id === slugParam,
-        );
-        if (match) {
-          setIsFavorite(true);
-          setFavoriteId(match.id);
-        } else {
-          setIsFavorite(false);
-          setFavoriteId(null);
-        }
-      } catch {
+      const res = await api.get("/favorites");
+      const match = (res.data as any[])?.find(
+        (fav) => fav.anime_id === slugParam,
+      );
+      if (match) {
+        setIsFavorite(true);
+        setFavoriteId(match.id);
+      } else {
         setIsFavorite(false);
         setFavoriteId(null);
       }
@@ -173,27 +168,20 @@ const Page = () => {
     }
     if (!slugParam) return;
     setFavoriteLoading(true);
-    try {
-      if (isFavorite && favoriteId) {
-        await api.delete(`/favorites/${favoriteId}`);
-        setIsFavorite(false);
-        setFavoriteId(null);
-        toast.success("Removed from favorites", {
-          style: { background: "green" },
-        });
-      } else {
-        const res = await api.post("/favorites", { anime_id: slugParam });
-        setIsFavorite(true);
-        setFavoriteId((res.data as any)?.id || slugParam);
-        toast.success("Added to favorites", { style: { background: "green" } });
-      }
-    } catch {
-      toast.error("Unable to update favorites", {
-        style: { background: "red" },
+    if (isFavorite && favoriteId) {
+      await api.delete(`/favorites/${favoriteId}`);
+      setIsFavorite(false);
+      setFavoriteId(null);
+      toast.success("Removed from favorites", {
+        style: { background: "green" },
       });
-    } finally {
-      setFavoriteLoading(false);
+    } else {
+      const res = await api.post("/favorites", { anime_id: slugParam });
+      setIsFavorite(true);
+      setFavoriteId((res.data as any).id);
+      toast.success("Added to favorites", { style: { background: "green" } });
     }
+    setFavoriteLoading(false);
   };
 
   return isLoading || !anime ? (

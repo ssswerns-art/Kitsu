@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, Float, ForeignKey, Integer, UniqueConstraint, func
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -10,21 +10,7 @@ from .base import Base
 
 class WatchProgress(Base):
     __tablename__ = "watch_progress"
-    __table_args__ = (
-        UniqueConstraint("user_id", "anime_id"),
-        # INVARIANT-2: Forward-only state - episode must be positive
-        CheckConstraint("episode > 0", name="ck_watch_progress_episode_positive"),
-        # INVARIANT-2: Forward-only state - progress must be in valid range
-        CheckConstraint(
-            "progress_percent IS NULL OR (progress_percent >= 0 AND progress_percent <= 100)",
-            name="ck_watch_progress_percent_range",
-        ),
-        # INVARIANT-2: Forward-only state - position must be non-negative
-        CheckConstraint(
-            "position_seconds IS NULL OR position_seconds >= 0",
-            name="ck_watch_progress_position_nonnegative",
-        ),
-    )
+    __table_args__ = (UniqueConstraint("user_id", "anime_id"),)
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -37,7 +23,7 @@ class WatchProgress(Base):
     )
     anime_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("anime.id", ondelete="CASCADE"),  # INVARIANT-3: Referential integrity
+        ForeignKey("anime.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )

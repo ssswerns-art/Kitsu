@@ -142,6 +142,45 @@ async def test_update_progress_enqueues_and_persists(
 
 
 @pytest.mark.anyio
+async def test_update_progress_retry_uses_same_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store: list[FakeWatchProgress] = []
+    user_id = uuid.uuid4()
+    anime_id = uuid.uuid4()
+    repo = FakeWatchProgressRepository(store)
+    background_repo = FakeWatchProgressRepository(store)
+    runner = JobRunner()
+
+    monkeypatch.setattr(update_progress_module, "default_job_runner", runner)
+    monkeypatch.setattr("app.background.default_job_runner", runner)
+
+    first = await update_progress(
+        repo,
+        user_id=user_id,
+        anime_id=anime_id,
+        episode=1,
+        position_seconds=120,
+        progress_percent=25.0,
+        watch_repo_factory=build_repo_factory(background_repo),
+    )
+    second = await update_progress(
+        repo,
+        user_id=user_id,
+        anime_id=anime_id,
+        episode=1,
+        position_seconds=120,
+        progress_percent=25.0,
+        watch_repo_factory=build_repo_factory(background_repo),
+    )
+
+    await asyncio.wait_for(runner.drain(), timeout=1)
+    await runner.stop()
+
+    assert first.id == second.id
+
+
+@pytest.mark.anyio
 async def test_update_progress_missing_anime_raises() -> None:
     repo = FakeWatchProgressRepository([], anime_exists=False)
 
