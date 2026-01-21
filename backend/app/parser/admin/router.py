@@ -52,17 +52,17 @@ router = APIRouter(
 
 
 class _EmptyCatalogSource:
-    def fetch_catalog(self):
+    async def fetch_catalog(self):
         return []
 
 
 class _EmptyScheduleSource:
-    def fetch_schedule(self):
+    async def fetch_schedule(self):
         return []
 
 
 class _EmptyEpisodeSource:
-    def fetch_episodes(self):
+    async def fetch_episodes(self):
         return []
 
 
@@ -298,7 +298,7 @@ async def run_parser_sync(
     payload: ParserRunRequest,
     session: AsyncSession = Depends(get_db),
     _: None = Depends(require_permission("admin:parser.settings")),
-) -> dict[str, object]:
+) -> dict[str, object] | list[dict[str, object]]:
     settings = await get_parser_settings(session)
     sources = set(payload.sources)
     catalog_source = (
@@ -320,7 +320,26 @@ async def run_parser_sync(
         catalog_source, episode_source, schedule_source, session=session
     )
     persist = payload.mode == "persist"
-    return service.sync_all(persist=persist, publish=False)
+    if persist:
+        return await service._sync_all_persisted(publish=False)
+    else:
+        catalog = list(await catalog_source.fetch_catalog())
+        schedule = list(await schedule_source.fetch_schedule())
+        episodes = list(await episode_source.fetch_episodes())
+        schedule_by_anime: dict[str, list] = {}
+        for item in schedule:
+            schedule_by_anime.setdefault(item.anime_source_id, []).append(item)
+        episodes_by_anime: dict[str, list] = {}
+        for episode in episodes:
+            episodes_by_anime.setdefault(episode.anime_source_id, []).append(episode)
+        return [
+            {
+                "anime": anime,
+                "schedule": schedule_by_anime.get(anime.source_id, []),
+                "episodes": episodes_by_anime.get(anime.source_id, []),
+            }
+            for anime in catalog
+        ]
 
 
 @router.post("/run/autoupdate")

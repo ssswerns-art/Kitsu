@@ -7,7 +7,7 @@ from typing import Any
 from ..config import ParserSettings
 from ..domain.entities import AnimeExternal, AnimeRelationExternal
 from ..ports.catalog_source import CatalogSourcePort
-from ._http import RateLimitedRequester, run_sync
+from ._http import RateLimitedRequester
 
 
 class ShikimoriCatalogSource(CatalogSourcePort):
@@ -32,10 +32,7 @@ class ShikimoriCatalogSource(CatalogSourcePort):
             max_retries=max_retries,
         )
 
-    def fetch_catalog(self) -> Sequence[AnimeExternal]:
-        return run_sync(self._fetch_catalog())
-
-    async def _fetch_catalog(self) -> list[AnimeExternal]:
+    async def fetch_catalog(self) -> Sequence[AnimeExternal]:
         payload = await self._requester.get_json(
             "animes",
             params={

@@ -164,7 +164,7 @@ class ParserEpisodeAutoupdateService:
         episode_source = self._episode_source or KodikEpisodeSource(
             settings, rate_limit_seconds=_resolve_rate_limit_seconds(kodik.rate_limit_per_min)
         )
-        schedule = list(schedule_source.fetch_schedule())
+        schedule = list(await schedule_source.fetch_schedule())
         now = self._now_provider()
         anime_result = await self._session.execute(
             select(
@@ -268,7 +268,7 @@ class ParserEpisodeAutoupdateService:
             batch_size = max(MIN_BATCH_SIZE, kodik.max_concurrency)
             for batch in _chunked(anime_source_ids, batch_size):
                 params = {KODIK_SHIKIMORI_PARAM: ",".join(batch)}
-                batch_episodes = list(episode_source.fetch_episodes_for(params))
+                batch_episodes = list(await episode_source.fetch_episodes_for(params))
                 rows: list[dict[str, object]] = []
                 conflict_keys: set[tuple[int, int]] = set()
                 for episode in batch_episodes:
