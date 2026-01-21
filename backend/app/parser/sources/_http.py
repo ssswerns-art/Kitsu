@@ -1,39 +1,11 @@
 from __future__ import annotations
 
 import asyncio
-import threading
 import time
-from collections.abc import Awaitable, Mapping
+from collections.abc import Mapping
 from typing import Any
 
 import httpx
-
-
-def run_sync(coro: Awaitable[Any]) -> Any:
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        return asyncio.run(coro)
-    return _run_in_thread(coro)
-
-
-def _run_in_thread(coro: Awaitable[Any]) -> Any:
-    result: Any = None
-    error: BaseException | None = None
-
-    def runner() -> None:
-        nonlocal result, error
-        try:
-            result = asyncio.run(coro)
-        except BaseException as exc:  # pragma: no cover - defensive
-            error = exc
-
-    thread = threading.Thread(target=runner, daemon=True)
-    thread.start()
-    thread.join()
-    if error:
-        raise error
-    return result
 
 
 class RateLimitedRequester:

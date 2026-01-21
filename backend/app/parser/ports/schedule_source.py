@@ -4,5 +4,5 @@ from ..domain.entities import ScheduleItem
 
 
 class ScheduleSourcePort(Protocol):
-    def fetch_schedule(self) -> Sequence[ScheduleItem]:
+    async def fetch_schedule(self) -> Sequence[ScheduleItem]:
         ...

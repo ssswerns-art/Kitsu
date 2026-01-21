@@ -6,7 +6,7 @@ from typing import Any
 from ..config import ParserSettings
 from ..domain.entities import EpisodeExternal, TranslationExternal
 from ..ports.episode_source import EpisodeSourcePort
-from ._http import RateLimitedRequester, run_sync
+from ._http import RateLimitedRequester
 
 
 class KodikEpisodeSource(EpisodeSourcePort):
@@ -29,13 +29,13 @@ class KodikEpisodeSource(EpisodeSourcePort):
             max_retries=max_retries,
         )
 
-    def fetch_episodes(self) -> Sequence[EpisodeExternal]:
-        return run_sync(self._fetch_episodes())
+    async def fetch_episodes(self) -> Sequence[EpisodeExternal]:
+        return await self._fetch_episodes()
 
-    def fetch_episodes_for(
+    async def fetch_episodes_for(
         self, search_params: Mapping[str, str] | None = None
     ) -> Sequence[EpisodeExternal]:
-        return run_sync(self._fetch_episodes(search_params))
+        return await self._fetch_episodes(search_params)
 
     async def _fetch_episodes(
         self, search_params: Mapping[str, str] | None = None

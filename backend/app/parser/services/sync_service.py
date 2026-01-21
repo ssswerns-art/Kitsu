@@ -17,7 +17,6 @@ from ..ports.schedule_source import ScheduleSourcePort
 from ..repositories.anime_external_repo import AnimeExternalRepository
 from ..repositories.episode_external_repo import EpisodeExternalRepository
 from ..repositories.schedule_repo import ScheduleRepository
-from ..sources._http import run_sync
 from ..tables import (
     parser_job_logs,
     parser_jobs,
@@ -310,22 +309,22 @@ class ParserSyncService:
             self._schedule_repo = self._schedule_repo or ScheduleRepository(session)
             self._episode_repo = self._episode_repo or EpisodeExternalRepository(session)
 
-    def sync_catalog(self) -> list[AnimeExternal]:
-        return list(self._catalog_source.fetch_catalog())
+    async def sync_catalog(self) -> list[AnimeExternal]:
+        return list(await self._catalog_source.fetch_catalog())
 
-    def sync_episodes(self) -> list[EpisodeExternal]:
-        return list(self._episode_source.fetch_episodes())
+    async def sync_episodes(self) -> list[EpisodeExternal]:
+        return list(await self._episode_source.fetch_episodes())
 
-    def sync_schedule(self) -> list[ScheduleItem]:
-        return list(self._schedule_source.fetch_schedule())
+    async def sync_schedule(self) -> list[ScheduleItem]:
+        return list(await self._schedule_source.fetch_schedule())
 
-    def sync_all(
+    async def sync_all(
         self, *, persist: bool = True, publish: bool = False
     ) -> list[dict[str, object]] | dict[str, object]:
         if not persist or self._session is None:
-            catalog = list(self._catalog_source.fetch_catalog())
-            schedule = list(self._schedule_source.fetch_schedule())
-            episodes = list(self._episode_source.fetch_episodes())
+            catalog = list(await self._catalog_source.fetch_catalog())
+            schedule = list(await self._schedule_source.fetch_schedule())
+            episodes = list(await self._episode_source.fetch_episodes())
             schedule_by_anime: dict[str, list] = {}
             for item in schedule:
                 schedule_by_anime.setdefault(item.anime_source_id, []).append(item)
@@ -340,7 +339,7 @@ class ParserSyncService:
                 }
                 for anime in catalog
             ]
-        return run_sync(self._sync_all_persisted(publish=publish))
+        return await self._sync_all_persisted(publish=publish)
 
     async def _sync_all_persisted(self, *, publish: bool) -> dict[str, object]:
         summary: dict[str, Any] = {
@@ -357,19 +356,19 @@ class ParserSyncService:
         schedule_error: Exception | None = None
         episode_error: Exception | None = None
         try:
-            catalog = self.sync_catalog()
+            catalog = await self.sync_catalog()
         except Exception as exc:  # pragma: no cover - defensive
             catalog = []
             catalog_error = exc
             summary["errors"].append({"source": "catalog", "message": str(exc)})
         try:
-            schedule = self.sync_schedule()
+            schedule = await self.sync_schedule()
         except Exception as exc:  # pragma: no cover - defensive
             schedule = []
             schedule_error = exc
             summary["errors"].append({"source": "schedule", "message": str(exc)})
         try:
-            episodes = self.sync_episodes()
+            episodes = await self.sync_episodes()
         except Exception as exc:  # pragma: no cover - defensive
             episodes = []
             episode_error = exc

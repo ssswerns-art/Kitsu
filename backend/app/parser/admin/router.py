@@ -52,17 +52,17 @@ router = APIRouter(
 
 
 class _EmptyCatalogSource:
-    def fetch_catalog(self):
+    async def fetch_catalog(self):
         return []
 
 
 class _EmptyScheduleSource:
-    def fetch_schedule(self):
+    async def fetch_schedule(self):
         return []
 
 
 class _EmptyEpisodeSource:
-    def fetch_episodes(self):
+    async def fetch_episodes(self):
         return []
 
 
@@ -298,7 +298,7 @@ async def run_parser_sync(
     payload: ParserRunRequest,
     session: AsyncSession = Depends(get_db),
     _: None = Depends(require_permission("admin:parser.settings")),
-) -> dict[str, object]:
+) -> dict[str, object] | list[dict[str, object]]:
     settings = await get_parser_settings(session)
     sources = set(payload.sources)
     catalog_source = (
@@ -320,7 +320,7 @@ async def run_parser_sync(
         catalog_source, episode_source, schedule_source, session=session
     )
     persist = payload.mode == "persist"
-    return service.sync_all(persist=persist, publish=False)
+    return await service.sync_all(persist=persist, publish=False)
 
 
 @router.post("/run/autoupdate")

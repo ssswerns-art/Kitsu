@@ -4,5 +4,5 @@ from ..domain.entities import EpisodeExternal
 
 
 class EpisodeSourcePort(Protocol):
-    def fetch_episodes(self) -> Sequence[EpisodeExternal]:
+    async def fetch_episodes(self) -> Sequence[EpisodeExternal]:
         ...
