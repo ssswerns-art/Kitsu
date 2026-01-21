@@ -214,12 +214,11 @@ class JobRunner:
                 except Exception as exc:  # noqa: BLE001
                     job.attempts += 1
                     self._logger.error(
-                        "[JOB] failed job_key=%s attempt=%s/%s worker_id=%s error=%s",
+                        "[JOB] failed job_key=%s attempt=%s/%s worker_id=%s",
                         job.key,
                         job.attempts,
                         job.max_attempts,
                         self._worker_id,
-                        exc,
                         exc_info=exc,
                     )
                     if job.attempts >= job.max_attempts:

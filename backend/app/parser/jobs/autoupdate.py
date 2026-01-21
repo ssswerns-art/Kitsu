@@ -118,8 +118,6 @@ class ParserAutoupdateScheduler:
         # Signal graceful shutdown
         self._should_stop = True
 
-        stop_reason = "graceful"
-
         # Stop lock extension
         if self._lock_extend_task:
             self._lock_extend_task.cancel()
@@ -140,17 +138,14 @@ class ParserAutoupdateScheduler:
             try:
                 await self._lock.release()
                 logger.info(
-                    "[SCHEDULER] stopped lock_key=%s reason=%s worker_id=%s",
+                    "[SCHEDULER] stopped lock_key=%s reason=graceful worker_id=%s",
                     SCHEDULER_LOCK_KEY,
-                    stop_reason,
                     self._worker_id,
                 )
             except (RedisError, ValueError) as exc:
-                stop_reason = "redis_error"
                 logger.warning(
-                    "[SCHEDULER] stopped lock_key=%s reason=%s worker_id=%s error=%s",
+                    "[SCHEDULER] stopped lock_key=%s reason=redis_error worker_id=%s error=%s",
                     SCHEDULER_LOCK_KEY,
-                    stop_reason,
                     self._worker_id,
                     exc,
                 )
