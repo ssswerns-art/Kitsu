@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping, Sequence
 from datetime import datetime
 
@@ -9,6 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..domain.entities import ScheduleItem
 from ..tables import anime_schedule
+
+logger = logging.getLogger(__name__)
 
 
 def _insert_for(session: AsyncSession):
@@ -31,6 +34,12 @@ class ScheduleRepository:
         *,
         checked_at: datetime,
     ) -> tuple[int, int]:
+        """
+        Upsert schedule items with exactly-once semantics.
+        
+        IDEMPOTENCY KEY: (anime_id, source_id, episode_number)
+        INVARIANT: Uses INSERT ... ON CONFLICT DO UPDATE for atomic idempotency.
+        """
         if not items:
             return 0, 0
         rows = []
@@ -54,6 +63,7 @@ class ScheduleRepository:
             return 0, skipped
         insert_fn = _insert_for(self._session)
         stmt = insert_fn(anime_schedule).values(rows)
+        # ATOMIC IDEMPOTENCY: ON CONFLICT ensures exactly-once effect
         stmt = stmt.on_conflict_do_update(
             index_elements=["anime_id", "source_id", "episode_number"],
             set_={
@@ -64,4 +74,9 @@ class ScheduleRepository:
             },
         )
         await self._session.execute(stmt)
+        logger.info(
+            "operation=parser:schedule action=upsert source_id=%d count=%d",
+            source_id,
+            len(rows),
+        )
         return len(rows), skipped

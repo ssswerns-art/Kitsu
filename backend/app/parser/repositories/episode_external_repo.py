@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping, Sequence
 from datetime import datetime
 
@@ -9,6 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..domain.entities import EpisodeExternal, TranslationExternal
 from ..tables import anime_episodes_external, anime_translations
+
+logger = logging.getLogger(__name__)
 
 
 def _insert_for(session: AsyncSession):
@@ -39,6 +42,12 @@ class EpisodeExternalRepository:
         *,
         updated_at: datetime,
     ) -> tuple[int, int, int]:
+        """
+        Upsert episodes with exactly-once semantics.
+        
+        IDEMPOTENCY KEY: (anime_id, source_id, episode_number)
+        INVARIANT: Uses INSERT ... ON CONFLICT DO UPDATE for atomic idempotency.
+        """
         if not items:
             return 0, 0, 0
         episode_rows = []
@@ -81,6 +90,7 @@ class EpisodeExternalRepository:
         if episode_rows:
             insert_fn = _insert_for(self._session)
             stmt = insert_fn(anime_episodes_external).values(episode_rows)
+            # ATOMIC IDEMPOTENCY: ON CONFLICT ensures exactly-once effect
             stmt = stmt.on_conflict_do_update(
                 index_elements=["anime_id", "source_id", "episode_number"],
                 set_={
@@ -91,9 +101,15 @@ class EpisodeExternalRepository:
                 },
             )
             await self._session.execute(stmt)
+            logger.info(
+                "operation=parser:episodes action=upsert source_id=%d count=%d",
+                source_id,
+                len(episode_rows),
+            )
         if translation_rows:
             insert_fn = _insert_for(self._session)
             stmt = insert_fn(anime_translations).values(list(translation_rows.values()))
+            # ATOMIC IDEMPOTENCY: ON CONFLICT ensures exactly-once effect
             stmt = stmt.on_conflict_do_update(
                 index_elements=["anime_id", "source_id", "translation_code"],
                 set_={
@@ -104,4 +120,9 @@ class EpisodeExternalRepository:
                 },
             )
             await self._session.execute(stmt)
+            logger.info(
+                "operation=parser:translations action=upsert source_id=%d count=%d",
+                source_id,
+                len(translation_rows),
+            )
         return len(episode_rows), skipped, len(translation_rows)

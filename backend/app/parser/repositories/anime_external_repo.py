@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from collections.abc import Sequence
 from datetime import datetime
 
@@ -12,6 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..domain.entities import AnimeExternal
 from ..tables import anime_external
+
+logger = logging.getLogger(__name__)
 
 
 def _insert_for(session: AsyncSession):
@@ -50,6 +53,12 @@ class AnimeExternalRepository:
     async def upsert_many(
         self, source_id: int, items: Sequence[AnimeExternal], *, seen_at: datetime
     ) -> dict[str, int]:
+        """
+        Upsert anime catalog with exactly-once semantics.
+        
+        IDEMPOTENCY KEY: (source_id, external_id)
+        INVARIANT: Uses INSERT ... ON CONFLICT DO UPDATE for atomic idempotency.
+        """
         if not items:
             return {}
         rows = [
@@ -75,6 +84,7 @@ class AnimeExternalRepository:
         ]
         insert_fn = _insert_for(self._session)
         stmt = insert_fn(anime_external).values(rows)
+        # ATOMIC IDEMPOTENCY: ON CONFLICT ensures exactly-once effect
         stmt = stmt.on_conflict_do_update(
             index_elements=["source_id", "external_id"],
             set_={
@@ -95,6 +105,11 @@ class AnimeExternalRepository:
             },
         )
         await self._session.execute(stmt)
+        logger.info(
+            "operation=parser:catalog action=upsert source_id=%d count=%d",
+            source_id,
+            len(items),
+        )
         external_ids = [str(item.source_id) for item in items]
         result = await self._session.execute(
             select(anime_external.c.id, anime_external.c.external_id).where(
