@@ -20,7 +20,6 @@ from app.parser.tables import (
     parser_settings,
     parser_sources,
 )
-from tests.test_utils import MockAsyncRedis
 
 
 class AsyncSessionAdapter:
@@ -271,71 +270,10 @@ async def test_autoupdate_scheduler_disabled(db_session) -> None:
         yield adapter
 
     scheduler = ParserAutoupdateScheduler(
-        session_factory=session_factory,
-        service_factory=service_factory,
-        redis_client=MockAsyncRedis(),
+        session_factory=session_factory, service_factory=service_factory
     )
 
     result = await scheduler.run_once()
 
     assert result["status"] == "disabled"
     assert calls == []
-
-
-@pytest.mark.anyio
-async def test_autoupdate_scheduler_lock_prevents_duplicate_start(db_session) -> None:
-    """Test that only one scheduler can start when lock is held."""
-    adapter, session = db_session
-    now = datetime.now(timezone.utc)
-    _seed_sources(session)
-    session.execute(
-        sa.insert(parser_settings).values(
-            mode="manual",
-            stage_only=True,
-            publish_enabled=False,
-            enable_autoupdate=True,
-            update_interval_minutes=999999,  # Very long to prevent actual run
-            dry_run=False,
-            updated_at=now,
-        )
-    )
-    session.commit()
-
-    redis = MockAsyncRedis()
-
-    @asynccontextmanager
-    async def session_factory():
-        yield adapter
-
-    def service_factory(**_kwargs):
-        class StubService:
-            async def run(self, *, force: bool = False) -> dict[str, object]:
-                return {"status": "success"}
-
-        return StubService()
-
-    # First scheduler acquires lock
-    scheduler1 = ParserAutoupdateScheduler(
-        session_factory=session_factory,
-        service_factory=service_factory,
-        redis_client=redis,
-    )
-    await scheduler1.start()
-    assert scheduler1._lock is not None
-    assert scheduler1._lock._acquired is True
-    assert scheduler1._task is not None
-
-    # Second scheduler cannot acquire lock
-    scheduler2 = ParserAutoupdateScheduler(
-        session_factory=session_factory,
-        service_factory=service_factory,
-        redis_client=redis,
-    )
-    await scheduler2.start()
-    assert scheduler2._lock is not None
-    assert scheduler2._lock._acquired is False
-    assert scheduler2._task is None
-
-    # Cleanup
-    await scheduler1.stop()
-    await scheduler2.stop()
