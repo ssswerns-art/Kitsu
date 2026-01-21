@@ -77,12 +77,23 @@ def admin_router(monkeypatch: pytest.MonkeyPatch):
     return importlib.reload(module)
 
 
-def test_admin_access_allows_admin() -> None:
-    assert "admin:*" in rbac.resolve_permissions("admin")
+def test_admin_access_allows_explicit_permissions() -> None:
+    """SECURITY-01: Admin should have explicit permissions, not wildcards."""
+    admin_perms = rbac.resolve_permissions("admin")
+    # No wildcards allowed
+    assert "admin:*" not in admin_perms
+    # But explicit admin permissions should be present
+    assert "admin.parser.settings" in admin_perms
+    assert "admin.parser.emergency" in admin_perms
+    assert "admin.parser.logs" in admin_perms
 
 
 def test_admin_access_denies_non_admin() -> None:
-    assert "admin:*" not in rbac.resolve_permissions("user")
+    """Non-admin users should not have admin permissions."""
+    user_perms = rbac.resolve_permissions("user")
+    assert "admin.parser.settings" not in user_perms
+    assert "admin.parser.emergency" not in user_perms
+    assert "admin.parser.logs" not in user_perms
 
 
 @pytest.mark.anyio
