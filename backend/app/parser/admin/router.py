@@ -7,9 +7,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...auth.helpers import require_permission
 from ...dependencies import get_db, get_current_user
 from ...models.user import User
+from ...services.admin.permission_service import PermissionService
 from ...services.audit.audit_service import AuditService
 from ..config import ParserSettings
 from ..services.autoupdate_service import ParserEpisodeAutoupdateService
@@ -49,6 +49,70 @@ router = APIRouter(
     prefix="/admin/parser",
     tags=["parser-admin"],
 )
+
+
+async def require_parser_logs_permission(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    """
+    Dependency to enforce admin.parser.logs permission.
+    
+    SECURITY: Required for viewing parser logs and dashboard.
+    
+    NOTE: PermissionService is lightweight and reuses the db session,
+    so instantiation per request is acceptable. This follows the same
+    pattern as other admin endpoints (see statistics).
+    """
+    permission_service = PermissionService(db)
+    await permission_service.require_permission(
+        user=current_user,
+        permission_name="admin.parser.logs",
+        actor_type="user"
+    )
+    return current_user
+
+
+async def require_parser_settings_permission(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    """
+    Dependency to enforce admin.parser.settings permission.
+    
+    SECURITY: Required for modifying parser configuration and running parser.
+    
+    NOTE: PermissionService is lightweight and reuses the db session,
+    so instantiation per request is acceptable.
+    """
+    permission_service = PermissionService(db)
+    await permission_service.require_permission(
+        user=current_user,
+        permission_name="admin.parser.settings",
+        actor_type="user"
+    )
+    return current_user
+
+
+async def require_parser_emergency_permission(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    """
+    Dependency to enforce admin.parser.emergency permission.
+    
+    SECURITY: Required for emergency stop operations.
+    
+    NOTE: PermissionService is lightweight and reuses the db session,
+    so instantiation per request is acceptable.
+    """
+    permission_service = PermissionService(db)
+    await permission_service.require_permission(
+        user=current_user,
+        permission_name="admin.parser.emergency",
+        actor_type="user"
+    )
+    return current_user
 
 
 class _EmptyCatalogSource:
@@ -110,7 +174,7 @@ async def _get_settings_id(session: AsyncSession) -> int | None:
 @router.get("/dashboard", response_model=ParserDashboardRead)
 async def get_dashboard(
     session: AsyncSession = Depends(get_db),
-    _: None = Depends(require_permission("admin:parser.logs")),
+    current_user: User = Depends(require_parser_logs_permission),
 ) -> ParserDashboardRead:
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(hours=24)
@@ -163,7 +227,7 @@ async def list_anime_external(
     status_text: str | None = Query(default=None, alias="status"),
     search: str | None = Query(default=None),
     session: AsyncSession = Depends(get_db),
-    _: None = Depends(require_permission("admin:parser.logs")),
+    current_user: User = Depends(require_parser_logs_permission),
 ) -> list[AnimeExternalRead]:
     stmt = (
         select(
@@ -201,7 +265,7 @@ async def list_anime_external(
 async def match_anime_external(
     payload: ParserMatchRequest,
     session: AsyncSession = Depends(get_db),
-    _: None = Depends(require_permission("admin:parser.settings")),
+    current_user: User = Depends(require_parser_settings_permission),
 ) -> dict[str, str]:
     async with session.begin():
         result = await session.execute(
@@ -225,7 +289,7 @@ async def match_anime_external(
 async def unmatch_anime_external(
     payload: ParserUnmatchRequest,
     session: AsyncSession = Depends(get_db),
-    _: None = Depends(require_permission("admin:parser.settings")),
+    current_user: User = Depends(require_parser_settings_permission),
 ) -> dict[str, str]:
     async with session.begin():
         result = await session.execute(
@@ -249,7 +313,7 @@ async def unmatch_anime_external(
 async def publish_anime_external(
     external_id: int,
     session: AsyncSession = Depends(get_db),
-    _: None = Depends(require_permission("admin:parser.settings")),
+    current_user: User = Depends(require_parser_settings_permission),
 ) -> ParserPublishAnimeRead:
     service = ParserPublishService(session)
     try:
@@ -265,7 +329,7 @@ async def publish_anime_external(
 async def publish_episode_external(
     payload: ParserPublishEpisodeRequest,
     session: AsyncSession = Depends(get_db),
-    _: None = Depends(require_permission("admin:parser.settings")),
+    current_user: User = Depends(require_parser_settings_permission),
 ) -> ParserPublishEpisodeRead:
     service = ParserPublishService(session)
     try:
@@ -281,7 +345,7 @@ async def publish_episode_external(
 async def preview_publish_diff(
     external_id: int,
     session: AsyncSession = Depends(get_db),
-    _: None = Depends(require_permission("admin:parser.logs")),
+    current_user: User = Depends(require_parser_logs_permission),
 ) -> ParserPublishPreviewRead:
     service = ParserPublishService(session)
     try:
@@ -297,7 +361,7 @@ async def preview_publish_diff(
 async def run_parser_sync(
     payload: ParserRunRequest,
     session: AsyncSession = Depends(get_db),
-    _: None = Depends(require_permission("admin:parser.settings")),
+    current_user: User = Depends(require_parser_settings_permission),
 ) -> dict[str, object]:
     settings = await get_parser_settings(session)
     sources = set(payload.sources)
@@ -326,7 +390,7 @@ async def run_parser_sync(
 @router.post("/run/autoupdate")
 async def run_parser_autoupdate(
     session: AsyncSession = Depends(get_db),
-    _: None = Depends(require_permission("admin:parser.settings")),
+    current_user: User = Depends(require_parser_settings_permission),
 ) -> dict[str, object]:
     service = ParserEpisodeAutoupdateService(session=session)
     return await service.run(force=True)
@@ -335,7 +399,7 @@ async def run_parser_autoupdate(
 @router.get("/settings", response_model=ParserSettingsRead)
 async def get_settings(
     session: AsyncSession = Depends(get_db),
-    _: None = Depends(require_permission("admin:parser.settings")),
+    current_user: User = Depends(require_parser_settings_permission),
 ) -> ParserSettingsRead:
     settings = await get_parser_settings(session)
     return _settings_response(settings)
@@ -346,8 +410,7 @@ async def update_settings(
     payload: ParserSettingsUpdate,
     request: Request,
     session: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-    _: None = Depends(require_permission("admin:parser.settings")),
+    current_user: User = Depends(require_parser_settings_permission),
 ) -> ParserSettingsRead:
     async with session.begin():
         current = await get_parser_settings(session)
@@ -387,12 +450,11 @@ async def toggle_parser_mode(
     payload: ParserModeToggleRequest,
     request: Request,
     session: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-    _: None = Depends(require_permission("admin:parser.settings")),
+    current_user: User = Depends(require_parser_settings_permission),
 ) -> dict[str, str]:
     """Toggle parser mode between manual and auto.
     
-    Requires: admin:parser.settings permission
+    Requires: admin.parser.settings permission
     
     Mode changes are logged to audit_logs.
     """
@@ -436,12 +498,11 @@ async def emergency_stop_parser(
     payload: ParserEmergencyStopRequest,
     request: Request,
     session: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-    _: None = Depends(require_permission("admin:parser.emergency")),
+    current_user: User = Depends(require_parser_emergency_permission),
 ) -> dict[str, str]:
     """Emergency stop for parser.
     
-    Requires: admin:parser.emergency permission
+    Requires: admin.parser.emergency permission
     
     Immediately stops active parser jobs and sets mode to manual.
     Logged to audit_logs with WARNING level.
@@ -500,11 +561,11 @@ async def get_parser_logs(
     to_date: str | None = Query(default=None),
     limit: int = Query(default=100, ge=1, le=500),
     session: AsyncSession = Depends(get_db),
-    _: None = Depends(require_permission("admin:parser.logs")),
+    current_user: User = Depends(require_parser_logs_permission),
 ) -> list[ParserJobLogRead]:
     """Get parser logs with optional filters.
     
-    Requires: admin:parser.logs permission
+    Requires: admin.parser.logs permission
     
     Filters:
     - level: error, warning, info

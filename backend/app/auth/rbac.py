@@ -1,12 +1,22 @@
 """
-DEPRECATED: This module is being phased out in favor of rbac_contract.py
+DEPRECATED AND UNUSED: This module has been completely phased out.
 
-For legacy compatibility only. New code should use:
+This file is kept ONLY for reference and will be removed in REFACTOR-03.
+DO NOT USE. DO NOT IMPORT. DO NOT EXTEND.
+
+For permission checks, use ONLY:
 - app.auth.rbac_contract for the security contract
 - app.services.admin.permission_service.PermissionService for runtime checks
 
 SECURITY WARNING: This module contains legacy code with deprecated patterns.
-DO NOT extend or modify. Use PermissionService for all permission checks.
+Any usage of this module is a SECURITY RISK and contract violation.
+
+REFACTOR-02 STATUS: ✅ ALL USAGE ELIMINATED
+- No endpoints use this module
+- No services use this module
+- All code migrated to PermissionService
+
+TODO REFACTOR-03: Delete this file entirely
 """
 from __future__ import annotations
 

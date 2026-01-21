@@ -277,3 +277,56 @@ class AuditService:
             ip_address=ip_address,
             user_agent=user_agent,
         )
+
+    async def log_action(
+        self,
+        actor: User | None,
+        actor_type: str,
+        action: str,
+        entity_type: str,
+        entity_id: str,
+        before: dict[str, Any] | None = None,
+        after: dict[str, Any] | None = None,
+        reason: str | None = None,
+        request: Any = None,  # TODO: Should be fastapi.Request | None, avoiding import for circular dependency
+    ) -> None:
+        """
+        Log a generic action with request context.
+        
+        SECURITY: Validates actor_type and extracts IP/user-agent from request.
+        
+        Args:
+            actor: The user performing the action
+            actor_type: Type of actor ('user', 'system', 'anonymous')
+            action: The action performed
+            entity_type: The type of entity
+            entity_id: The ID of the entity
+            before: State before the change
+            after: State after the change
+            reason: Optional reason for the change
+            request: FastAPI Request object for IP/user-agent extraction
+        """
+        ip_address = None
+        user_agent = None
+        
+        # Extract context from request if provided
+        # We use hasattr to avoid type checking since Request is not imported
+        # to prevent circular dependencies
+        if request:
+            if hasattr(request, 'client') and request.client:
+                ip_address = request.client.host
+            if hasattr(request, 'headers'):
+                user_agent = request.headers.get("user-agent")
+        
+        await self.log(
+            action=action,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            actor=actor,
+            actor_type=actor_type,
+            before=before,
+            after=after,
+            reason=reason,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )

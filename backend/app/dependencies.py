@@ -22,7 +22,6 @@ from .domain.ports.watch_progress import (
 )
 from .domain.ports.token import RefreshTokenPort
 from .domain.ports.user import UserPort
-from .auth import rbac
 from .models.user import User
 from .security.token_inspection import ExpiredTokenError, InvalidTokenError, validate_access_token
 
@@ -140,9 +139,3 @@ async def get_current_user_optional(
     return await get_current_user(
         credentials=credentials, db=db, token_port=token_port
     )
-
-
-async def get_current_role(
-    user: User | None = Depends(get_current_user_optional),
-) -> rbac.Role:
-    return rbac.resolve_role(user)
