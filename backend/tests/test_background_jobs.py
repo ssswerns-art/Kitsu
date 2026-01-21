@@ -10,9 +10,37 @@ favorites_use_case = importlib.import_module("app.use_cases.favorites.add_favori
 watch_use_case = importlib.import_module("app.use_cases.watch.update_progress")
 
 
+class MockAsyncRedis:
+    """Mock async Redis client for testing."""
+
+    def __init__(self):
+        self._data: dict[str, str] = {}
+
+    async def ping(self):
+        return True
+
+    async def get(self, key: str) -> str | None:
+        return self._data.get(key)
+
+    async def set(self, key: str, value: str, nx: bool = False, ex: int | None = None) -> bool:
+        if nx and key in self._data:
+            return False
+        self._data[key] = value
+        return True
+
+    async def delete(self, key: str) -> int:
+        if key in self._data:
+            del self._data[key]
+            return 1
+        return 0
+
+    async def expire(self, key: str, seconds: int) -> bool:
+        return key in self._data
+
+
 @pytest.mark.anyio
 async def test_enqueue_executes_job() -> None:
-    runner = JobRunner()
+    runner = JobRunner(redis_client=MockAsyncRedis())
     counter = {"count": 0}
 
     async def handler() -> None:
@@ -22,13 +50,14 @@ async def test_enqueue_executes_job() -> None:
     await asyncio.wait_for(runner.drain(), timeout=1)
 
     assert counter["count"] == 1
-    assert runner.status_for("job-1") == JobStatus.SUCCEEDED
+    status = await runner.status_for("job-1")
+    assert status == JobStatus.SUCCEEDED
     await runner.stop()
 
 
 @pytest.mark.anyio
 async def test_retry_until_success() -> None:
-    runner = JobRunner()
+    runner = JobRunner(redis_client=MockAsyncRedis())
     counter = {"count": 0}
 
     async def handler() -> None:
@@ -42,13 +71,14 @@ async def test_retry_until_success() -> None:
     await asyncio.wait_for(runner.drain(), timeout=1)
 
     assert counter["count"] == 3
-    assert runner.status_for("job-retry") == JobStatus.SUCCEEDED
+    status = await runner.status_for("job-retry")
+    assert status == JobStatus.SUCCEEDED
     await runner.stop()
 
 
 @pytest.mark.anyio
 async def test_duplicate_enqueue_is_idempotent() -> None:
-    runner = JobRunner()
+    runner = JobRunner(redis_client=MockAsyncRedis())
     counter = {"count": 0}
 
     async def handler() -> None:
@@ -60,7 +90,8 @@ async def test_duplicate_enqueue_is_idempotent() -> None:
     await asyncio.wait_for(runner.drain(), timeout=1)
 
     assert counter["count"] == 1
-    assert runner.status_for("job-dup") == JobStatus.SUCCEEDED
+    status = await runner.status_for("job-dup")
+    assert status == JobStatus.SUCCEEDED
     await runner.stop()
 
 
@@ -75,7 +106,7 @@ class _DummySession:
 @pytest.mark.anyio
 async def test_add_favorite_job_calls_use_case(monkeypatch: pytest.MonkeyPatch) -> None:
     called = {"count": 0}
-    runner = JobRunner()
+    runner = JobRunner(redis_client=MockAsyncRedis())
 
     async def fake_persist(user_id, anime_id, favorite_id, created_at) -> None:  # type: ignore[no-untyped-def]
         called["count"] += 1
@@ -102,7 +133,7 @@ async def test_add_favorite_job_calls_use_case(monkeypatch: pytest.MonkeyPatch) 
 @pytest.mark.anyio
 async def test_watch_progress_job_calls_use_case(monkeypatch: pytest.MonkeyPatch) -> None:
     called = {"count": 0}
-    runner = JobRunner()
+    runner = JobRunner(redis_client=MockAsyncRedis())
 
     async def fake_persist(
         user_id,  # type: ignore[no-untyped-def]
