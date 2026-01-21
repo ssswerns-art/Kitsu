@@ -56,7 +56,11 @@ class DistributedLock:
                 logger.debug("Acquired lock: %s (TTL=%ds)", self._lock_key, self._ttl)
             return self._acquired
         except RedisError as exc:
-            logger.error("Failed to acquire lock %s: %s", self._lock_key, exc)
+            logger.error(
+                "Redis operation failed operation=SET key=%s error=%s",
+                self._lock_key,
+                exc,
+            )
             return False
 
     async def release(self) -> bool:
@@ -73,7 +77,11 @@ class DistributedLock:
                 self._acquired = False
             return bool(deleted)
         except RedisError as exc:
-            logger.error("Failed to release lock %s: %s", self._lock_key, exc)
+            logger.error(
+                "Redis operation failed operation=DEL key=%s error=%s",
+                self._lock_key,
+                exc,
+            )
             return False
 
     async def extend(self) -> bool:
@@ -90,5 +98,9 @@ class DistributedLock:
                 logger.debug("Extended lock: %s (TTL=%ds)", self._lock_key, self._ttl)
             return bool(result)
         except RedisError as exc:
-            logger.error("Failed to extend lock %s: %s", self._lock_key, exc)
+            logger.error(
+                "Redis operation failed operation=EXPIRE key=%s error=%s",
+                self._lock_key,
+                exc,
+            )
             return False

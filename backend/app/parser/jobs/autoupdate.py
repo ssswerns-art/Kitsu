@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import uuid
 from contextlib import suppress
 from typing import AsyncContextManager, Callable
 
@@ -51,6 +52,7 @@ class ParserAutoupdateScheduler:
         self._lock: DistributedLock | None = None
         self._lock_extend_task: asyncio.Task[None] | None = None
         self._should_stop = False  # Flag for graceful shutdown
+        self._worker_id = str(uuid.uuid4())[:8]  # Short UUID for observability
 
     async def _ensure_redis(self) -> AsyncRedis:
         """Lazy initialize Redis client."""
@@ -80,21 +82,34 @@ class ParserAutoupdateScheduler:
                 redis, SCHEDULER_LOCK_KEY, ttl_seconds=SCHEDULER_LOCK_TTL
             )
 
+            logger.info(
+                "[SCHEDULER] lock_acquire_attempt lock_key=%s worker_id=%s",
+                SCHEDULER_LOCK_KEY,
+                self._worker_id,
+            )
+
             if await self._lock.acquire():
                 logger.info(
-                    "Scheduler lock acquired - starting ParserAutoupdateScheduler"
+                    "[SCHEDULER] lock_acquired lock_key=%s worker_id=%s ttl=%ds",
+                    SCHEDULER_LOCK_KEY,
+                    self._worker_id,
+                    SCHEDULER_LOCK_TTL,
                 )
                 self._task = asyncio.create_task(self._loop())
                 # Start lock extension task
                 self._lock_extend_task = asyncio.create_task(self._extend_lock_loop())
             else:
                 logger.info(
-                    "Scheduler lock NOT acquired - another worker is running the scheduler"
+                    "[SCHEDULER] lock_denied lock_key=%s reason=held_by_another_worker worker_id=%s",
+                    SCHEDULER_LOCK_KEY,
+                    self._worker_id,
                 )
 
         except (RedisError, ValueError) as exc:
             logger.warning(
-                "Failed to acquire scheduler lock (Redis unavailable): %s. Scheduler will NOT start.",
+                "[SCHEDULER] lock_acquire_failed lock_key=%s reason=redis_unavailable worker_id=%s error=%s",
+                SCHEDULER_LOCK_KEY,
+                self._worker_id,
                 exc,
             )
 
@@ -120,8 +135,20 @@ class ParserAutoupdateScheduler:
 
         # Release lock
         if self._lock:
-            await self._lock.release()
-            logger.info("Scheduler lock released")
+            try:
+                await self._lock.release()
+                logger.info(
+                    "[SCHEDULER] stopped lock_key=%s reason=graceful worker_id=%s",
+                    SCHEDULER_LOCK_KEY,
+                    self._worker_id,
+                )
+            except (RedisError, ValueError) as exc:
+                logger.warning(
+                    "[SCHEDULER] stopped lock_key=%s reason=redis_error worker_id=%s error=%s",
+                    SCHEDULER_LOCK_KEY,
+                    self._worker_id,
+                    exc,
+                )
             self._lock = None
 
     async def run_once(self, *, force: bool = False) -> dict[str, object]:
@@ -148,10 +175,20 @@ class ParserAutoupdateScheduler:
                 if self._should_stop:
                     break
                 if not await self._lock.extend():
-                    logger.error("Failed to extend scheduler lock - signaling shutdown")
+                    logger.error(
+                        "[SCHEDULER] ttl_extend_failed lock_key=%s reason=lock_lost worker_id=%s",
+                        SCHEDULER_LOCK_KEY,
+                        self._worker_id,
+                    )
                     # Signal graceful shutdown instead of canceling
                     self._should_stop = True
                     break
+                logger.debug(
+                    "[SCHEDULER] ttl_extended lock_key=%s ttl=%ds worker_id=%s",
+                    SCHEDULER_LOCK_KEY,
+                    SCHEDULER_LOCK_TTL,
+                    self._worker_id,
+                )
         except asyncio.CancelledError:
             return
 
