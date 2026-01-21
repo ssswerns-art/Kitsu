@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import uuid
 from contextlib import suppress
 from dataclasses import dataclass
 from enum import Enum
@@ -42,6 +43,7 @@ class JobRunner:
         self._lock = asyncio.Lock()
         self._logger = logging.getLogger("kitsu.jobs")
         self._redis_available = True
+        self._worker_id = str(uuid.uuid4())[:8]  # Short UUID for observability
 
     async def _ensure_redis(self) -> AsyncRedis:
         """Lazy initialize Redis client."""
@@ -81,7 +83,11 @@ class JobRunner:
         Prevents duplicate enqueuing across workers.
         """
         if not self._redis_available:
-            self._logger.error("Cannot enqueue job - Redis unavailable")
+            self._logger.error(
+                "[JOB] enqueue_failed job_key=%s reason=redis_unavailable worker_id=%s",
+                job.key,
+                self._worker_id,
+            )
             return job
 
         async with self._lock:
@@ -98,10 +104,11 @@ class JobRunner:
                         JobStatus.RUNNING,
                         JobStatus.SUCCEEDED,
                     }:
-                        self._logger.debug(
-                            "Job %s already %s, skipping enqueue",
+                        self._logger.info(
+                            "[JOB] enqueue_skipped job_key=%s reason=duplicate status=%s worker_id=%s",
                             job.key,
-                            current_status,
+                            current_status.value,
+                            self._worker_id,
                         )
                         return job
 
@@ -118,13 +125,26 @@ class JobRunner:
                     # We successfully claimed this job
                     self._jobs[job.key] = job
                     await self._ensure_worker()
-                    self._logger.debug("Enqueued job: %s", job.key)
+                    self._logger.info(
+                        "[JOB] enqueued job_key=%s worker_id=%s",
+                        job.key,
+                        self._worker_id,
+                    )
                 else:
                     # Another worker already enqueued this job
-                    self._logger.debug("Job %s already enqueued by another worker", job.key)
+                    self._logger.info(
+                        "[JOB] enqueue_skipped job_key=%s reason=duplicate worker_id=%s",
+                        job.key,
+                        self._worker_id,
+                    )
 
             except (RedisError, ValueError) as exc:
-                self._logger.error("Failed to enqueue job %s: %s", job.key, exc)
+                self._logger.error(
+                    "[JOB] enqueue_failed job_key=%s reason=redis_error worker_id=%s error=%s",
+                    job.key,
+                    self._worker_id,
+                    exc,
+                )
 
         return job
 
@@ -173,7 +193,11 @@ class JobRunner:
 
             # Update status to RUNNING
             await redis.set(status_key, JobStatus.RUNNING.value, ex=3600)
-            self._logger.debug("Running job: %s", job.key)
+            self._logger.info(
+                "[JOB] started job_key=%s worker_id=%s",
+                job.key,
+                self._worker_id,
+            )
 
             # Execute with retries
             while job.attempts < job.max_attempts:
@@ -181,20 +205,30 @@ class JobRunner:
                     await job.handler()
                     # Success
                     await redis.set(status_key, JobStatus.SUCCEEDED.value, ex=86400)
-                    self._logger.debug("Job succeeded: %s", job.key)
+                    self._logger.info(
+                        "[JOB] succeeded job_key=%s worker_id=%s",
+                        job.key,
+                        self._worker_id,
+                    )
                     return
                 except Exception as exc:  # noqa: BLE001
                     job.attempts += 1
                     self._logger.error(
-                        "Job failed (key=%s attempt=%s/%s)",
+                        "[JOB] failed job_key=%s attempt=%s/%s worker_id=%s error=%s",
                         job.key,
                         job.attempts,
                         job.max_attempts,
+                        self._worker_id,
+                        exc,
                         exc_info=exc,
                     )
                     if job.attempts >= job.max_attempts:
                         await redis.set(status_key, JobStatus.FAILED.value, ex=86400)
-                        self._logger.error("Job failed permanently: %s", job.key)
+                        self._logger.error(
+                            "[JOB] failed_permanently job_key=%s worker_id=%s",
+                            job.key,
+                            self._worker_id,
+                        )
                         return
                     delay = min(
                         job.backoff_seconds * job.attempts,
@@ -203,4 +237,9 @@ class JobRunner:
                     await asyncio.sleep(delay)
 
         except (RedisError, ValueError) as exc:
-            self._logger.error("Redis error while running job %s: %s", job.key, exc)
+            self._logger.error(
+                "[JOB] redis_error job_key=%s worker_id=%s error=%s",
+                job.key,
+                self._worker_id,
+                exc,
+            )
