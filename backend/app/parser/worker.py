@@ -72,6 +72,7 @@ class ParserWorker:
         self._session_maker = session_maker or AsyncSessionLocal
         self._running = False
         self._shutdown_event = asyncio.Event()
+        self._lifecycle_lock = asyncio.Lock()
         
     async def start(self) -> None:
         """Start the worker loop.
@@ -80,8 +81,13 @@ class ParserWorker:
         Multiple workers can run, but only one will be active at a time
         due to distributed locking.
         """
-        self._running = True
-        self._shutdown_event.clear()
+        async with self._lifecycle_lock:
+            if self._running:
+                return
+            
+            self._running = True
+            self._shutdown_event.clear()
+        
         logger.info(
             "Parser worker starting",
             extra={"interval_seconds": self._interval_seconds}
@@ -124,8 +130,12 @@ class ParserWorker:
     async def shutdown(self) -> None:
         """Stop the worker gracefully."""
         logger.info("Parser worker shutdown requested")
-        self._running = False
-        self._shutdown_event.set()
+        async with self._lifecycle_lock:
+            if not self._running:
+                return
+            
+            self._running = False
+            self._shutdown_event.set()
     
     async def _run_cycle(self) -> None:
         """Execute one worker cycle.
