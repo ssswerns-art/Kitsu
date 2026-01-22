@@ -13,12 +13,31 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from enum import Enum, auto
 from typing import AsyncGenerator
 
 from redis.asyncio import Redis as AsyncRedis, from_url as async_from_url
 from redis.exceptions import RedisError
 
 logger = logging.getLogger(__name__)
+
+
+class _RedisLifecycleState(Enum):
+    """Lifecycle states for Redis singleton.
+    
+    State transitions:
+    - UNINITIALIZED -> INITIALIZED (via init_redis)
+    - INITIALIZED -> CLOSED (via close_redis)
+    - CLOSED -> INITIALIZED (via init_redis - allows restart)
+    
+    Invariants:
+    - init_redis() is idempotent: multiple calls in INITIALIZED state are no-ops
+    - close_redis() is idempotent: multiple calls in CLOSED/UNINITIALIZED state are no-ops
+    - get_redis() raises RuntimeError if state is not INITIALIZED
+    """
+    UNINITIALIZED = auto()
+    INITIALIZED = auto()
+    CLOSED = auto()
 
 
 class RedisClient:
@@ -265,13 +284,24 @@ class RedisClient:
 
 
 # Global instance (created at startup, not at import)
+# Protected by _redis_lock to prevent race conditions during initialization/shutdown
 _redis_client: RedisClient | None = None
+_redis_state: _RedisLifecycleState = _RedisLifecycleState.UNINITIALIZED
+_redis_lock: asyncio.Lock = asyncio.Lock()
 
 
 async def init_redis(redis_url: str) -> RedisClient:
     """Initialize global Redis client.
     
-    Should be called once at application startup.
+    This function is idempotent - calling it multiple times when already
+    initialized will return the existing client without creating a new one.
+    
+    Thread-safety: Protected by asyncio.Lock to prevent race conditions.
+    
+    State transitions:
+    - UNINITIALIZED -> INITIALIZED: Creates new client and connects
+    - INITIALIZED -> INITIALIZED: Returns existing client (no-op)
+    - CLOSED -> INITIALIZED: Creates new client and connects (allows restart)
     
     Args:
         redis_url: Redis connection URL
@@ -279,32 +309,79 @@ async def init_redis(redis_url: str) -> RedisClient:
     Returns:
         Redis client instance
     """
-    global _redis_client
-    _redis_client = RedisClient(redis_url)
-    await _redis_client.connect()
-    return _redis_client
+    global _redis_client, _redis_state
+    
+    async with _redis_lock:
+        # Idempotent: if already initialized, return existing client
+        if _redis_state == _RedisLifecycleState.INITIALIZED:
+            assert _redis_client is not None
+            logger.debug("Redis already initialized, returning existing client")
+            return _redis_client
+        
+        # Create new client (handles UNINITIALIZED and CLOSED states)
+        logger.info(f"Initializing Redis client (current state: {_redis_state.name})")
+        _redis_client = RedisClient(redis_url)
+        await _redis_client.connect()
+        _redis_state = _RedisLifecycleState.INITIALIZED
+        logger.info("Redis client initialized successfully")
+        return _redis_client
 
 
 async def close_redis() -> None:
     """Close global Redis client.
     
-    Should be called at application shutdown.
+    This function is idempotent - calling it multiple times or when not
+    initialized will safely do nothing.
+    
+    Thread-safety: Protected by asyncio.Lock to prevent race conditions.
+    
+    State transitions:
+    - INITIALIZED -> CLOSED: Disconnects and cleans up client
+    - CLOSED -> CLOSED: No-op
+    - UNINITIALIZED -> UNINITIALIZED: No-op
     """
-    global _redis_client
-    if _redis_client is not None:
-        await _redis_client.disconnect()
-        _redis_client = None
+    global _redis_client, _redis_state
+    
+    async with _redis_lock:
+        # Idempotent: if not initialized, nothing to close
+        if _redis_state != _RedisLifecycleState.INITIALIZED:
+            logger.debug(f"Redis not initialized (state: {_redis_state.name}), nothing to close")
+            return
+        
+        # Close the client
+        logger.info("Closing Redis client")
+        if _redis_client is not None:
+            await _redis_client.disconnect()
+            _redis_client = None
+        _redis_state = _RedisLifecycleState.CLOSED
+        logger.info("Redis client closed successfully")
 
 
 def get_redis() -> RedisClient:
     """Get the global async Redis client.
     
+    This function checks the lifecycle state and ensures the client is
+    initialized before returning it. It will never return a closed or
+    uninitialized client.
+    
+    Note: This function does not acquire the lock because it's a read-only
+    operation and we want to allow concurrent access to the initialized client.
+    The state check is atomic due to Python's GIL.
+    
     Returns:
         Redis client instance
         
     Raises:
-        RuntimeError: If Redis client not initialized
+        RuntimeError: If Redis client not initialized or has been closed
     """
+    if _redis_state != _RedisLifecycleState.INITIALIZED:
+        raise RuntimeError(
+            f"Redis client not available (state: {_redis_state.name}). "
+            "Call init_redis() first and ensure it hasn't been closed."
+        )
+    
     if _redis_client is None:
-        raise RuntimeError("Redis client not initialized. Call init_redis() first.")
+        # This should never happen if state is INITIALIZED, but we check defensively
+        raise RuntimeError("Redis client is None despite INITIALIZED state (internal error)")
+    
     return _redis_client
