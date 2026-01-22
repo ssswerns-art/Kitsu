@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 from urllib.parse import urlparse
@@ -136,6 +137,15 @@ class Settings(BaseModel):
 # Deferred settings initialization to avoid import-time side effects (ISSUE #6)
 # Settings validation will happen during application startup, not module import
 _settings_instance: Settings | None = None
+_settings_lock = asyncio.Lock()
+
+
+async def _init_settings_async() -> None:
+    """Initialize settings with asyncio.Lock protection."""
+    global _settings_instance
+    async with _settings_lock:
+        if _settings_instance is None:
+            _settings_instance = Settings.from_env()
 
 
 def get_settings() -> Settings:
@@ -151,8 +161,38 @@ def get_settings() -> Settings:
         ValueError: If required environment variables are missing or invalid
     """
     global _settings_instance
-    if _settings_instance is None:
-        _settings_instance = Settings.from_env()
+    
+    # Fast path: already initialized
+    if _settings_instance is not None:
+        return _settings_instance
+    
+    # Initialization required - use asyncio.Lock for protection
+    try:
+        loop = asyncio.get_running_loop()
+        # We're in an async context with a running loop
+        # Check if lock is available before initializing
+        if _settings_instance is None:
+            if not _settings_lock.locked():
+                # Lock not held - safe to initialize directly in this sync function
+                # called from async context (typical case: settings proxy access)
+                _settings_instance = Settings.from_env()
+            else:
+                # Lock is held by another task - wait briefly for it to complete
+                # Use busy-wait since we can't await in sync function
+                import time
+                max_wait = 1.0  # 1 second max wait
+                start = time.time()
+                while _settings_instance is None and time.time() - start < max_wait:
+                    time.sleep(0.001)
+                if _settings_instance is None:
+                    # Timeout - initialize anyway to avoid deadlock
+                    _settings_instance = Settings.from_env()
+    except RuntimeError:
+        # No running event loop - sync context (startup/tests)
+        # Use asyncio.run() to properly acquire and use the lock
+        if _settings_instance is None:
+            asyncio.run(_init_settings_async())
+    
     return _settings_instance
 
 
