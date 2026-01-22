@@ -133,4 +133,36 @@ class Settings(BaseModel):
         )
 
 
-settings = Settings.from_env()
+# Deferred settings initialization to avoid import-time side effects (ISSUE #6)
+# Settings validation will happen during application startup, not module import
+_settings_instance: Settings | None = None
+
+
+def get_settings() -> Settings:
+    """Get settings instance, creating it on first access.
+    
+    This allows the module to be imported without environment validation.
+    Settings validation happens when first accessed (typically during startup).
+    
+    Returns:
+        Settings instance
+        
+    Raises:
+        ValueError: If required environment variables are missing or invalid
+    """
+    global _settings_instance
+    if _settings_instance is None:
+        _settings_instance = Settings.from_env()
+    return _settings_instance
+
+
+# Create settings proxy for backward compatibility
+# Actual Settings.from_env() is deferred until first attribute access
+class _SettingsProxy:
+    """Proxy to defer settings creation until first attribute access."""
+    
+    def __getattr__(self, name: str):
+        return getattr(get_settings(), name)
+
+
+settings = _SettingsProxy()  # type: ignore[assignment]

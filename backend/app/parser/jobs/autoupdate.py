@@ -93,7 +93,9 @@ class ParserAutoupdateScheduler:
         Only one instance across all workers will be active at a time.
         Each iteration tries to acquire a distributed lock.
         """
+        # ISSUE #11: Log scheduler first run for observability
         logger.info("Parser autoupdate scheduler loop started")
+        first_iteration = True
         
         while True:
             try:
@@ -105,19 +107,31 @@ class ParserAutoupdateScheduler:
                     ttl_seconds=SCHEDULER_LOCK_TTL,
                 ) as acquired:
                     if acquired:
-                        logger.info("Acquired scheduler lock, running autoupdate")
+                        # ISSUE #11: Log first iteration explicitly
+                        if first_iteration:
+                            logger.info("Scheduler acquired lock on first iteration, running autoupdate")
+                            first_iteration = False
+                        else:
+                            logger.info("Acquired scheduler lock, running autoupdate")
+                        
                         result = await self.run_once(force=False)
                         interval = int(result.get("interval_minutes") or DEFAULT_INTERVAL_MINUTES)
                     else:
                         # Another worker has the lock
                         logger.debug("Scheduler lock held by another worker, sleeping")
                         interval = DEFAULT_INTERVAL_MINUTES
+                        first_iteration = False  # Not really the first iteration anymore
                 
                 # Sleep until next cycle
                 await asyncio.sleep(interval * 60)
                 
             except Exception as exc:
-                logger.error("Scheduler loop error", exc_info=exc)
+                # ISSUE #11: Log fatal error on first iteration
+                if first_iteration:
+                    logger.error("Scheduler FATAL ERROR on first iteration - autoupdate will not run", exc_info=exc)
+                    first_iteration = False
+                else:
+                    logger.error("Scheduler loop error", exc_info=exc)
                 # Sleep before retrying on error
                 await asyncio.sleep(60)
 

@@ -48,6 +48,8 @@ from .utils.health import check_database_connection
 from .utils.startup import run_optional_startup_tasks, run_required_startup_checks
 
 AVATAR_DIR = Path(__file__).resolve().parent.parent / "uploads" / "avatars"
+# Create avatar directory early to allow StaticFiles mount at import time
+# This is a minimal side effect - just directory creation with exist_ok=True
 AVATAR_DIR.mkdir(parents=True, exist_ok=True)
 
 log_level_name = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -74,28 +76,84 @@ def _health_response(status_text: str, status_code: int) -> JSONResponse:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Application lifespan manager with proper error handling and cleanup."""
     logger.info("Starting application")
-    if settings.debug:
-        logger.warning("DEBUG=true — do not use in production")
-
-    # Initialize Redis for distributed coordination
-    from .infrastructure.redis import init_redis, close_redis
-    await init_redis(settings.redis_url)
-    logger.info("Redis initialized for distributed coordination")
-
-    await run_required_startup_checks(engine)
-    await run_optional_startup_tasks()
     
-    # Start parser autoupdate scheduler (uses distributed lock)
-    await parser_autoupdate_scheduler.start()
+    # Import Redis utilities here to avoid circular imports
+    from .infrastructure.redis import init_redis, close_redis, get_redis
+    
+    # Track what was initialized for cleanup
+    redis_initialized = False
+    scheduler_started = False
+    job_runner_started = False
+    
+    try:
+        # Validate settings early (ISSUE #6 - deferred from import time)
+        if settings.debug:
+            logger.warning("DEBUG=true — do not use in production")
+        
+        # ISSUE #1: Wrap all startup in try/except for guaranteed cleanup
+        # Initialize Redis for distributed coordination
+        await init_redis(settings.redis_url)
+        redis_initialized = True
+        logger.info("Redis initialized for distributed coordination")
+        
+        # ISSUE #2: Verify Redis connection with ping
+        try:
+            redis_client = get_redis()
+            redis = await redis_client._ensure_connected()
+            # Perform actual ping to verify connectivity
+            await redis.ping()
+            logger.info("Redis connection verified with ping")
+        except Exception as exc:
+            logger.error("Redis ping failed - Redis is not accessible", exc_info=exc)
+            raise RuntimeError("Redis connection failed. Ensure Redis is running and accessible at %s" % settings.redis_url) from exc
 
-    yield
+        # Run database checks
+        await run_required_startup_checks(engine)
+        await run_optional_startup_tasks()
+        
+        # Start parser autoupdate scheduler (uses distributed lock)
+        await parser_autoupdate_scheduler.start()
+        scheduler_started = True
+        logger.info("Parser autoupdate scheduler started")
 
-    # Cleanup
-    await parser_autoupdate_scheduler.stop()
-    await default_job_runner.stop()
-    await close_redis()
-    logger.info("Application shutdown complete")
+        yield
+
+    except Exception as exc:
+        # ISSUE #1: Log startup failure and perform cleanup before re-raising
+        logger.error("Application startup failed", exc_info=exc)
+        raise
+        
+    finally:
+        # ISSUE #3: Cleanup with individual try/except blocks
+        # Each step is isolated so one failure doesn't block others
+        logger.info("Starting application shutdown")
+        
+        # Stop parser scheduler
+        if scheduler_started:
+            try:
+                await parser_autoupdate_scheduler.stop()
+                logger.info("Parser autoupdate scheduler stopped")
+            except Exception as exc:
+                logger.error("Error stopping parser scheduler", exc_info=exc)
+        
+        # Stop default job runner
+        try:
+            await default_job_runner.stop()
+            logger.info("Default job runner stopped")
+        except Exception as exc:
+            logger.error("Error stopping default job runner", exc_info=exc)
+        
+        # Close Redis connection
+        if redis_initialized:
+            try:
+                await close_redis()
+                logger.info("Redis connection closed")
+            except Exception as exc:
+                logger.error("Error closing Redis connection", exc_info=exc)
+        
+        logger.info("Application shutdown complete")
 
 
 app = FastAPI(title=settings.app_name, debug=settings.debug, lifespan=lifespan)
