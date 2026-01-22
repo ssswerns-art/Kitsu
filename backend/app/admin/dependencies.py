@@ -1,64 +1,98 @@
 """
-Admin Dependencies - Permission-based dependency injection (STUB ONLY).
+Admin Dependencies - Permission-based dependency injection with RBAC enforcement.
 
-This module is a placeholder for future RBAC enforcement logic.
-Currently contains no active enforcement - this is by design for Phase 6.
+PHASE 7: Real RBAC enforcement active.
+All admin endpoints now verify user authentication and permissions.
 
-PHASE 6: Permission structure wired, but NO enforcement.
-Dependencies exist in endpoint signatures, but return None (noop).
-
-NOTE: No runtime enforcement in this phase. Stub only.
+SECURITY: All permission checks enforce:
+- User must be authenticated
+- User must be admin actor (not system/bot)
+- User must have explicit permissions
 """
 from __future__ import annotations
 
 from typing import Callable
 
+from fastapi import Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.admin.contracts.permissions import AdminPermission
+from app.dependencies import get_current_user, get_db
+from app.models.user import User
+from app.services.admin.permission_service import PermissionService
 
 
 def require_admin_permission(permission: AdminPermission) -> Callable:
     """
-    Stub dependency for single admin permission check.
+    Enforce admin permission check for a single permission.
     
-    TODO (PHASE 7):
-    Enforce admin permission check here.
-    - Verify user is authenticated
-    - Check user has the required permission
-    - Raise HTTPException(403) if unauthorized
+    Verifies:
+    - User is authenticated (401 if not)
+    - User is admin actor (not system/bot)
+    - User has the required permission (403 if not)
     
     Args:
         permission: The required AdminPermission
         
     Returns:
-        Dependency function that returns None (noop in PHASE 6)
+        Dependency function that enforces the permission check
     """
-    async def dependency() -> None:
-        # PHASE 6: No enforcement, just structure
-        # PHASE 7 will add actual permission checks
-        return None
+    async def dependency(
+        user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
+    ) -> None:
+        permission_service = PermissionService(db)
+        
+        # Check if user has the required permission
+        # PermissionService.has_permission handles all security checks
+        has_perm = await permission_service.has_permission(
+            user=user,
+            permission_name=permission.value,
+            actor_type="user"
+        )
+        
+        if not has_perm:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Permission denied: {permission.value} required"
+            )
     
     return dependency
 
 
 def require_admin_permissions(*permissions: AdminPermission) -> Callable:
     """
-    Stub dependency for multiple admin permission checks.
+    Enforce admin permission checks for multiple permissions.
     
-    TODO (PHASE 7):
-    Enforce admin permission checks here.
-    - Verify user is authenticated
-    - Check user has ALL required permissions
-    - Raise HTTPException(403) if unauthorized
+    Verifies:
+    - User is authenticated (401 if not)
+    - User is admin actor (not system/bot)
+    - User has ALL required permissions (403 if not)
     
     Args:
         *permissions: Variable number of required AdminPermissions
         
     Returns:
-        Dependency function that returns None (noop in PHASE 6)
+        Dependency function that enforces all permission checks
     """
-    async def dependency() -> None:
-        # PHASE 6: No enforcement, just structure
-        # PHASE 7 will add actual permission checks
-        return None
+    async def dependency(
+        user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
+    ) -> None:
+        permission_service = PermissionService(db)
+        
+        # Check if user has all required permissions
+        permission_names = [perm.value for perm in permissions]
+        has_all = await permission_service.has_all_permissions(
+            user=user,
+            permission_names=permission_names,
+            actor_type="user"
+        )
+        
+        if not has_all:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Permission denied: requires all of {permission_names}"
+            )
     
     return dependency
