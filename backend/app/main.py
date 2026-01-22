@@ -48,6 +48,9 @@ from .utils.health import check_database_connection
 from .utils.startup import run_optional_startup_tasks, run_required_startup_checks
 
 AVATAR_DIR = Path(__file__).resolve().parent.parent / "uploads" / "avatars"
+# Create avatar directory early to allow StaticFiles mount at import time
+# This is a minimal side effect - just directory creation with exist_ok=True
+AVATAR_DIR.mkdir(parents=True, exist_ok=True)
 
 log_level_name = os.getenv("LOG_LEVEL", "INFO").upper()
 
@@ -98,9 +101,8 @@ async def lifespan(app: FastAPI):
         # ISSUE #2: Verify Redis connection with ping
         try:
             redis_client = get_redis()
-            await redis_client._ensure_connected()
-            # Perform actual ping to verify connectivity
             redis = await redis_client._ensure_connected()
+            # Perform actual ping to verify connectivity
             await redis.ping()
             logger.info("Redis connection verified with ping")
         except Exception as exc:
@@ -110,10 +112,6 @@ async def lifespan(app: FastAPI):
         # Run database checks
         await run_required_startup_checks(engine)
         await run_optional_startup_tasks()
-        
-        # AVATAR_DIR creation moved from import-time (ISSUE #6)
-        AVATAR_DIR.mkdir(parents=True, exist_ok=True)
-        logger.info("Avatar directory ready: %s", AVATAR_DIR)
         
         # Start parser autoupdate scheduler (uses distributed lock)
         await parser_autoupdate_scheduler.start()
