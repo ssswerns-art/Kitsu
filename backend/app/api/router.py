@@ -1,9 +1,6 @@
 from fastapi import APIRouter
 
-from .internal import favorites as internal_favorites
 from .internal import health as internal_health
-from .internal import watch as internal_watch
-from ..parser.admin.router import router as parser_admin
 from .proxy import anime as proxy_anime
 from .proxy import episodes as proxy_episodes
 from .proxy import import_anilist as proxy_import_anilist
@@ -15,9 +12,6 @@ router = APIRouter(prefix="/api")
 
 _internal_routers = [
     internal_health.router,
-    internal_favorites.router,
-    internal_watch.router,
-    parser_admin.router,
 ]
 
 _admin_routers = [

@@ -33,7 +33,9 @@ from .errors import (
     error_payload,
     resolve_error_code,
 )
+from .admin import router as admin_router
 from .api import router as api_router
+from .parser.admin import router as parser_admin_router
 from .parser.jobs.autoupdate import parser_autoupdate_scheduler
 from .routers import (
     anime,
@@ -41,7 +43,6 @@ from .routers import (
     episodes,
     favorites,
     releases,
-    search,
     watch,
 )
 from .utils.health import check_database_connection
@@ -221,13 +222,13 @@ routers = [
     episodes.router,
     favorites.router,
     watch.router,
+    admin_router.router,
+    parser_admin_router.router,
     api_router,
 ]
 
 for router in routers:
     app.include_router(router)
-
-app.include_router(search.router, tags=["Search"])
 
 SAFE_HTTP_MESSAGES: dict[int, str] = {
     status.HTTP_400_BAD_REQUEST: ValidationError.message,
