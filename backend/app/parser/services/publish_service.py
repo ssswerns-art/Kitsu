@@ -142,7 +142,7 @@ class ParserPublishService:
                     actor_type="system",
                 )
             except Exception as exc:
-                logger.warning(
+                logger.exception(
                     f"[PARSER COMPLIANCE] Cannot update anime {anime_id}: {exc}"
                 )
                 raise
@@ -269,7 +269,7 @@ class ParserPublishService:
                     actor_type="system",
                 )
             except Exception as exc:
-                logger.warning(
+                logger.exception(
                     f"[PARSER COMPLIANCE] Cannot update episode {episode_number}: {exc}"
                 )
                 raise
