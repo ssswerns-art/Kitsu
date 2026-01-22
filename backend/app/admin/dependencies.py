@@ -13,10 +13,11 @@ from __future__ import annotations
 
 from typing import Callable
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.admin.contracts.permissions import AdminPermission
+from app.crud.audit_log import AuditLogRepository
 from app.dependencies import get_current_user, get_db
 from app.models.user import User
 from app.services.admin.permission_service import PermissionService
@@ -31,6 +32,8 @@ def require_admin_permission(permission: AdminPermission) -> Callable:
     - User is admin actor (not system/bot)
     - User has the required permission (403 if not)
     
+    AUDIT ISSUE #8: Logs permission denials to audit_logs table.
+    
     Args:
         permission: The required AdminPermission
         
@@ -38,6 +41,7 @@ def require_admin_permission(permission: AdminPermission) -> Callable:
         Dependency function that enforces the permission check
     """
     async def dependency(
+        request: Request,
         user: User = Depends(get_current_user),
         db: AsyncSession = Depends(get_db),
     ) -> None:
@@ -52,6 +56,28 @@ def require_admin_permission(permission: AdminPermission) -> Callable:
         )
         
         if not has_perm:
+            # AUDIT ISSUE #8: Log permission denial (best-effort, fire-and-forget)
+            try:
+                audit_repo = AuditLogRepository(db)
+                await audit_repo.create(
+                    actor_id=user.id,
+                    actor_type="user",
+                    action="permission_denied",
+                    entity_type="admin_permission",
+                    entity_id=permission.value,
+                    reason="RBAC_DENIED",
+                    before=None,
+                    after={
+                        "required_permissions": [permission.value],
+                        "request_method": request.method if hasattr(request, "method") else None,
+                        "request_path": request.url.path if hasattr(request, "url") else None,
+                    },
+                )
+            except Exception:
+                # CRITICAL: Audit logging failures MUST NOT block the 403 response
+                # Silently continue - the denial will still be enforced
+                pass
+            
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Permission denied: {permission.value} required"
@@ -69,6 +95,8 @@ def require_admin_permissions(*permissions: AdminPermission) -> Callable:
     - User is admin actor (not system/bot)
     - User has ALL required permissions (403 if not)
     
+    AUDIT ISSUE #8: Logs permission denials to audit_logs table.
+    
     Args:
         *permissions: Variable number of required AdminPermissions
         
@@ -76,6 +104,7 @@ def require_admin_permissions(*permissions: AdminPermission) -> Callable:
         Dependency function that enforces all permission checks
     """
     async def dependency(
+        request: Request,
         user: User = Depends(get_current_user),
         db: AsyncSession = Depends(get_db),
     ) -> None:
@@ -90,6 +119,28 @@ def require_admin_permissions(*permissions: AdminPermission) -> Callable:
         )
         
         if not has_all:
+            # AUDIT ISSUE #8: Log permission denial (best-effort, fire-and-forget)
+            try:
+                audit_repo = AuditLogRepository(db)
+                await audit_repo.create(
+                    actor_id=user.id,
+                    actor_type="user",
+                    action="permission_denied",
+                    entity_type="admin_permission",
+                    entity_id=",".join(permission_names),
+                    reason="RBAC_DENIED",
+                    before=None,
+                    after={
+                        "required_permissions": permission_names,
+                        "request_method": request.method if hasattr(request, "method") else None,
+                        "request_path": request.url.path if hasattr(request, "url") else None,
+                    },
+                )
+            except Exception:
+                # CRITICAL: Audit logging failures MUST NOT block the 403 response
+                # Silently continue - the denial will still be enforced
+                pass
+            
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Permission denied: requires all of {permission_names}"
