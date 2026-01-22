@@ -12,7 +12,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response, status
+from pydantic import BaseModel
 
 from app.admin.contracts.parser import ParserStatusRead, ParserJobStatusRead
 from app.admin.contracts.permissions import AdminPermission
@@ -20,6 +21,9 @@ from app.admin.contracts.roles import AdminRoleList, AdminRoleRead
 from app.admin.contracts.system import SystemHealthRead, SystemComponentStatus
 from app.admin.contracts.users import AdminUserList, AdminUserRead, AdminUserShort
 from app.admin.dependencies import require_admin_permission
+from app.admin.services.audit_service import AuditService
+from app.dependencies import get_current_user
+from app.models.user import User
 
 # Create admin router with READ-ONLY endpoints
 router = APIRouter(
@@ -222,3 +226,97 @@ async def get_system_health() -> SystemHealthRead:
         components=mock_components,
         checked_at=datetime.now(timezone.utc),
     )
+
+
+# ============================================================================
+# PHASE 8: WRITE ENDPOINTS (MINIMAL)
+# ============================================================================
+
+
+class UpdateUserRolesRequest(BaseModel):
+    """Request body for updating user roles."""
+    roles: list[str]
+
+
+class AssignRolesRequest(BaseModel):
+    """Request body for bulk role assignment."""
+    user_id: UUID
+    roles: list[str]
+
+
+@router.post("/users/{user_id}/roles", status_code=status.HTTP_204_NO_CONTENT)
+async def update_user_roles(
+    user_id: UUID,
+    request: UpdateUserRolesRequest,
+    user: User = Depends(get_current_user),
+    _: None = Depends(require_admin_permission(AdminPermission.USERS_MANAGE)),
+) -> Response:
+    """
+    Update user roles (WRITE, stub implementation).
+    
+    PHASE 8: Minimal write endpoint with audit logging.
+    No real database logic - TODO stub only.
+    Audit logging is fire-and-forget and won't block the request.
+    
+    Required permission: USERS_MANAGE
+    
+    Args:
+        user_id: UUID of the user to update
+        request: List of role names to assign
+        user: Current authenticated user (for audit)
+    
+    Returns:
+        204 No Content on success
+    """
+    # TODO: Implement actual database logic to update user roles
+    # For now, this is a stub endpoint that only logs the action
+    
+    # Audit logging - fire-and-forget, AFTER successful RBAC check
+    audit_service = AuditService()
+    await audit_service.log_admin_action(
+        actor_id=user.id,
+        action="admin.users.roles.update",
+        target_type="user",
+        target_id=user_id,
+        payload={"roles": request.roles},
+    )
+    
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/roles/assign", status_code=status.HTTP_204_NO_CONTENT)
+async def assign_roles_bulk(
+    request: AssignRolesRequest,
+    user: User = Depends(get_current_user),
+    _: None = Depends(require_admin_permission(AdminPermission.ROLES_MANAGE)),
+) -> Response:
+    """
+    Assign roles in bulk (WRITE, stub implementation).
+    
+    PHASE 8: Minimal write endpoint with audit logging.
+    No real database logic - TODO stub only.
+    Audit logging is fire-and-forget and won't block the request.
+    
+    Required permission: ROLES_MANAGE
+    
+    Args:
+        request: User ID and list of role names to assign
+        user: Current authenticated user (for audit)
+    
+    Returns:
+        204 No Content on success
+    """
+    # TODO: Implement actual database logic for bulk role assignment
+    # For now, this is a stub endpoint that only logs the action
+    
+    # Audit logging - fire-and-forget, AFTER successful RBAC check
+    audit_service = AuditService()
+    await audit_service.log_admin_action(
+        actor_id=user.id,
+        action="admin.roles.assign",
+        target_type="user",
+        target_id=request.user_id,
+        payload={"roles": request.roles},
+    )
+    
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
