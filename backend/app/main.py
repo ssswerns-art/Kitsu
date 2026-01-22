@@ -33,7 +33,9 @@ from .errors import (
     error_payload,
     resolve_error_code,
 )
+from .admin import router as admin_router
 from .api import router as api_router
+from .parser.admin import router as parser_admin_router
 from .parser.jobs.autoupdate import parser_autoupdate_scheduler
 from .routers import (
     anime,
@@ -221,6 +223,8 @@ routers = [
     episodes.router,
     favorites.router,
     watch.router,
+    admin_router.router,
+    parser_admin_router.router,
     api_router,
 ]
 
