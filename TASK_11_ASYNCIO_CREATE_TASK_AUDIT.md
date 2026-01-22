@@ -1,5 +1,23 @@
 # TASK #11 — ASYNCIO.CREATE_TASK() AUDIT REPORT
 
+## Краткое изложение (Summary in Russian)
+
+**Всего найдено `asyncio.create_task()`**: 2 экземпляра
+- **Продакшн-код (`backend/app/**`)**: 1 экземпляр
+- **Тестовый код (`backend/tests/**`)**: 1 экземпляр
+
+**Результат**: Все экземпляры имеют контролируемый lifecycle. Исправления не требуются.
+
+### Проверено:
+✅ Все `asyncio.create_task()` найдены и описаны  
+✅ Ни одной «висящей» задачи без объяснения  
+✅ Продакшн-экземпляр полностью контролируется  
+✅ Тестовый экземпляр за пределами области аудита  
+✅ Изменённых файлов: 0 (только добавлен отчёт)  
+✅ Поведение системы не изменено  
+
+---
+
 ## Summary
 
 **Total `asyncio.create_task()` instances found**: 2
@@ -45,6 +63,58 @@
 5. No risk of task leaks, zombie tasks, or silent failures
 6. Follows best practices for background task management
 
+**CODE ANALYSIS**:
+
+```python
+# CURRENT IMPLEMENTATION (Lines 27-59)
+class ParserAutoupdateScheduler:
+    def __init__(self, ...) -> None:
+        self._session_factory = session_factory
+        self._service_factory = service_factory
+        self._task: asyncio.Task[None] | None = None  # ✅ Task reference stored
+
+    async def start(self) -> None:
+        """Start the scheduler loop."""
+        if self._task and not self._task.done():  # ✅ Guards against duplicate
+            return
+        self._task = asyncio.create_task(self._loop())  # ✅ Task stored
+
+    async def stop(self) -> None:
+        if self._task is None:
+            return
+        self._task.cancel()  # ✅ Explicit cancellation
+        with suppress(asyncio.CancelledError):  # ✅ Handles cancellation
+            await self._task
+        self._task = None  # ✅ Cleanup reference
+```
+
+```python
+# INTEGRATION WITH APPLICATION LIFECYCLE (main.py:78-157)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    scheduler_started = False
+    try:
+        # ...startup code...
+        await parser_autoupdate_scheduler.start()  # ✅ Start on startup
+        scheduler_started = True
+        yield
+    finally:
+        if scheduler_started:
+            try:
+                await parser_autoupdate_scheduler.stop()  # ✅ Stop on shutdown
+                logger.info("Parser autoupdate scheduler stopped")
+            except Exception as exc:
+                logger.error("Error stopping parser scheduler", exc_info=exc)
+```
+
+**VERIFICATION**:
+- ✅ Task ownership: `ParserAutoupdateScheduler` class owns the task
+- ✅ Lifecycle control: Clear `start()` and `stop()` methods
+- ✅ Shutdown guarantee: Integrated into application lifespan manager
+- ✅ Exception safety: `CancelledError` not caught by `except Exception` in loop
+- ✅ No duplicate tasks: Guards with `if self._task and not self._task.done()`
+- ✅ No reference loss: Task stored in `self._task` throughout lifecycle
+
 ---
 
 ### Instance 2: Test Code - Worker Shutdown Test
@@ -75,6 +145,41 @@
 2. Task is properly awaited in test
 3. No risk of leaks in production environment
 4. Test actually validates proper shutdown behavior
+
+**CODE ANALYSIS**:
+
+```python
+# TEST CODE (Lines 300-321)
+@pytest.mark.anyio
+async def test_worker_shutdown_gracefully(db_session):
+    """Test worker can be shut down gracefully."""
+    adapter, session, session_maker = db_session
+    
+    # Seed manual mode to avoid actual work
+    _seed_manual_mode(session)
+    
+    # Create worker
+    worker = ParserWorker(interval_seconds=1, session_maker=session_maker)
+    
+    # Start worker in background
+    worker_task = asyncio.create_task(worker.start())  # ✅ Task stored in local var
+    
+    # Wait a bit then shutdown
+    await asyncio.sleep(0.5)
+    await worker.shutdown()
+    
+    # Wait for worker to stop
+    await asyncio.wait_for(worker_task, timeout=2.0)  # ✅ Task awaited with timeout
+    
+    # Verify worker stopped
+    assert not worker._running
+```
+
+**VERIFICATION**:
+- ✅ Out of scope: Test code in `backend/tests/`, not `backend/app/`
+- ✅ Proper handling: Task awaited before test completion
+- ✅ No leak risk: Test framework ensures cleanup
+- ✅ Timeout protection: Uses `asyncio.wait_for()` to prevent hanging
 
 ---
 
