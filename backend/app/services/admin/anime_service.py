@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...crud.anime_admin import (
     get_anime_admin_list,
+    get_anime_by_id_admin,
     check_anime_has_video,
     detect_anime_errors,
     update_anime_admin,
@@ -133,7 +134,7 @@ class AnimeAdminService:
         await self.permission_service.require_permission(actor, "anime.view")
         
         # Get anime
-        anime = await anime_admin.get_anime_by_id_admin(self.session, anime_id)
+        anime = await get_anime_by_id_admin(self.session, anime_id)
         if not anime:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -219,7 +220,7 @@ class AnimeAdminService:
         await self.permission_service.require_permission(actor, "anime.edit")
         
         # Get anime
-        anime = await anime_admin.get_anime_by_id_admin(self.session, anime_id)
+        anime = await get_anime_by_id_admin(self.session, anime_id)
         if not anime:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
