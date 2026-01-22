@@ -12,6 +12,12 @@ PHASE 8: WRITE endpoints added with audit logging.
 - POST /admin/roles/assign - Bulk role assignment
 All write actions are audited with fire-and-forget logging.
 
+PHASE 9: Parser/System write actions added.
+- POST /admin/parser/restart - Restart parser (stub)
+- POST /admin/parser/sync - Manual sync trigger (stub)
+- POST /admin/system/maintenance - Toggle maintenance mode (stub)
+All write actions are audited with fire-and-forget logging.
+
 NOTE: Write endpoints are stubs with TODO comments for DB logic.
 """
 from __future__ import annotations
@@ -324,6 +330,126 @@ async def assign_roles_bulk(
         target_type="user",
         target_id=request.user_id,
         payload={"roles": request.roles},
+    )
+    
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ============================================================================
+# PHASE 9: PARSER / SYSTEM WRITE ENDPOINTS (MINIMAL)
+# ============================================================================
+
+
+@router.post("/parser/restart", status_code=status.HTTP_204_NO_CONTENT)
+async def restart_parser(
+    user: User = Depends(get_current_user),
+    _: None = Depends(require_admin_permission(AdminPermission.PARSER_MANAGE)),
+) -> Response:
+    """
+    Restart parser system (WRITE, stub implementation).
+    
+    PHASE 9: Minimal write endpoint with audit logging.
+    No real restart logic - TODO stub only.
+    Audit logging is fire-and-forget and won't block the request.
+    
+    Required permission: PARSER_MANAGE
+    
+    Args:
+        user: Current authenticated user (for audit)
+    
+    Returns:
+        204 No Content on success
+    """
+    # TODO: Implement actual parser restart logic
+    # For now, this is a stub endpoint that only logs the action
+    
+    # Audit logging - fire-and-forget, AFTER successful RBAC check
+    audit_service = AuditService()
+    await audit_service.log_admin_action(
+        actor_id=user.id,
+        action="admin.parser.restart",
+        target_type="system",
+        target_id="parser",
+        payload={},
+    )
+    
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/parser/sync", status_code=status.HTTP_204_NO_CONTENT)
+async def sync_parser(
+    user: User = Depends(get_current_user),
+    _: None = Depends(require_admin_permission(AdminPermission.PARSER_MANAGE)),
+) -> Response:
+    """
+    Trigger manual parser sync (WRITE, stub implementation).
+    
+    PHASE 9: Minimal write endpoint with audit logging.
+    No real sync trigger logic - TODO stub only.
+    Audit logging is fire-and-forget and won't block the request.
+    
+    Required permission: PARSER_MANAGE
+    
+    Args:
+        user: Current authenticated user (for audit)
+    
+    Returns:
+        204 No Content on success
+    """
+    # TODO: Implement actual parser sync trigger logic
+    # For now, this is a stub endpoint that only logs the action
+    
+    # Audit logging - fire-and-forget, AFTER successful RBAC check
+    audit_service = AuditService()
+    await audit_service.log_admin_action(
+        actor_id=user.id,
+        action="admin.parser.sync",
+        target_type="system",
+        target_id="parser",
+        payload={},
+    )
+    
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+class MaintenanceModeRequest(BaseModel):
+    """Request body for toggling maintenance mode."""
+    enabled: bool
+
+
+@router.post("/system/maintenance", status_code=status.HTTP_204_NO_CONTENT)
+async def toggle_maintenance_mode(
+    request: MaintenanceModeRequest,
+    user: User = Depends(get_current_user),
+    _: None = Depends(require_admin_permission(AdminPermission.ROLES_MANAGE)),
+) -> Response:
+    """
+    Toggle system maintenance mode (WRITE, stub implementation).
+    
+    PHASE 9: Minimal write endpoint with audit logging.
+    No real maintenance mode logic - TODO stub only.
+    Audit logging is fire-and-forget and won't block the request.
+    
+    Required permission: ROLES_MANAGE
+    
+    Args:
+        request: Maintenance mode state (enabled: bool)
+        user: Current authenticated user (for audit)
+    
+    Returns:
+        204 No Content on success
+    """
+    # TODO: Implement actual maintenance mode toggle logic
+    # For now, this is a stub endpoint that only logs the action
+    
+    # Audit logging - fire-and-forget, AFTER successful RBAC check
+    audit_service = AuditService()
+    await audit_service.log_admin_action(
+        actor_id=user.id,
+        action="admin.system.maintenance",
+        target_type="system",
+        target_id="core",
+        payload={"enabled": request.enabled},
     )
     
     return Response(status_code=status.HTTP_204_NO_CONTENT)
