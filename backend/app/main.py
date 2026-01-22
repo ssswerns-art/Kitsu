@@ -86,7 +86,6 @@ async def lifespan(app: FastAPI):
     # Track what was initialized for cleanup
     redis_initialized = False
     scheduler_started = False
-    job_runner_started = False
     
     try:
         # Validate settings early (ISSUE #6 - deferred from import time)

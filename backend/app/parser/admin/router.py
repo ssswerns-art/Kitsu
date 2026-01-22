@@ -31,7 +31,6 @@ from .schemas import (
     ParserDashboardRead,
     ParserEmergencyStopRequest,
     ParserJobLogRead,
-    ParserLogFilter,
     ParserMatchRequest,
     ParserModeToggleRequest,
     ParserPublishAnimeRead,

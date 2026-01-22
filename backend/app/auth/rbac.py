@@ -10,7 +10,7 @@ DO NOT extend or modify. Use PermissionService for all permission checks.
 """
 from __future__ import annotations
 
-from typing import Final, Iterable
+from typing import Final
 
 from ..models.user import User
 

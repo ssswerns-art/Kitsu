@@ -7,7 +7,7 @@ including filtering, sorting, and retrieving anime with computed metadata.
 import uuid
 from typing import Literal
 
-from sqlalchemy import func, select, and_, or_, case
+from sqlalchemy import func, select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models.anime import Anime

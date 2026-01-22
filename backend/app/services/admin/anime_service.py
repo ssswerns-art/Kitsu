@@ -10,7 +10,6 @@ This service implements all business logic for anime CMS operations:
 - Automatic broken state detection
 """
 import uuid
-from typing import Any
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,7 +22,6 @@ from ...crud.anime_admin import (
     update_anime_admin,
     auto_update_broken_state,
 )
-from ...models.anime import Anime
 from ...models.user import User
 from ...schemas.anime_admin import (
     AnimeAdminListFilter,
@@ -136,7 +134,7 @@ class AnimeAdminService:
         await self.permission_service.require_permission(actor, "anime.view")
         
         # Get anime
-        anime = await anime_admin.get_anime_by_id_admin(self.session, anime_id)
+        anime = await get_anime_by_id_admin(self.session, anime_id)
         if not anime:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -222,7 +220,7 @@ class AnimeAdminService:
         await self.permission_service.require_permission(actor, "anime.edit")
         
         # Get anime
-        anime = await anime_admin.get_anime_by_id_admin(self.session, anime_id)
+        anime = await get_anime_by_id_admin(self.session, anime_id)
         if not anime:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

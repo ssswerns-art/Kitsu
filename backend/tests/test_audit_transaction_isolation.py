@@ -6,7 +6,7 @@ the main business transaction, preventing commit leakage.
 """
 import uuid
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch, call
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.services.admin.permission_service import PermissionService
 from app.models.user import User

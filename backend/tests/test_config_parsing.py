@@ -1,4 +1,3 @@
-import os
 import pytest
 
 # Tests for Settings.from_env() with different ALLOWED_ORIGINS formats

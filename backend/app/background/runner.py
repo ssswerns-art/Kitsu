@@ -1,6 +1,5 @@
 import hashlib
 import logging
-from contextlib import suppress
 from dataclasses import dataclass
 from enum import Enum
 from typing import Awaitable, Callable

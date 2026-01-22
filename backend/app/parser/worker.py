@@ -29,9 +29,7 @@ from .config import ParserSettings
 from .scheduler import ParserScheduler, get_sources_needing_catalog_sync
 from .services.autoupdate_service import ParserEpisodeAutoupdateService
 from .services.sync_service import ParserSyncService, get_parser_settings
-from .sources.kodik_episode import KodikEpisodeSource
 from .sources.shikimori_catalog import ShikimoriCatalogSource
-from .sources.shikimori_schedule import ShikimoriScheduleSource
 from .tables import parser_job_logs, parser_jobs, parser_settings as settings_table, parser_sources
 
 logger = logging.getLogger(__name__)

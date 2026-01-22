@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 import uuid
 from collections.abc import Mapping
-from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 from sqlalchemy import delete, insert, select, update
@@ -19,9 +18,7 @@ from app.services.audit.audit_service import AuditService
 
 from ..config import ParserSettings
 from ..domain.errors import (
-    InvalidStateTransitionError,
     ParserCannotOverrideManualError,
-    ParserCannotPublishError,
 )
 from ..repositories.anime_external_binding_repo import AnimeExternalBindingRepository
 from ..tables import (

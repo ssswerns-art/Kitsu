@@ -5,7 +5,6 @@ import uuid
 import pytest
 
 from app.background.runner import Job, JobRunner, JobStatus
-from app.background import default_job_runner
 favorites_use_case = importlib.import_module("app.use_cases.favorites.add_favorite")
 watch_use_case = importlib.import_module("app.use_cases.watch.update_progress")
 

@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 import importlib
 import sys
 import types
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 import sqlalchemy as sa

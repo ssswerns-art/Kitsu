@@ -21,7 +21,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .config import ParserSettings
-from .services.autoupdate_service import resolve_update_interval_minutes
 from .tables import parser_sources
 
 logger = logging.getLogger(__name__)

@@ -1,6 +1,5 @@
 import os
 
-import httpx
 from fastapi import status
 from fastapi.testclient import TestClient
 import pytest

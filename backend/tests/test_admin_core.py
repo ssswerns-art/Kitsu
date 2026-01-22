@@ -14,16 +14,10 @@ from fastapi import HTTPException
 
 from app.models.role import Role
 from app.models.permission import Permission
-from app.models.user_role import UserRole
-from app.models.role_permission import RolePermission
 from app.models.audit_log import AuditLog
 from app.models.anime import Anime
 from app.models.episode import Episode
-from app.crud.role import RoleRepository
-from app.crud.permission import PermissionRepository
-from app.crud.audit_log import AuditLogRepository
-from app.services.admin import PermissionService, LockService
-from app.services.audit import AuditService
+from app.services.admin import LockService
 
 
 class TestRoleModel:

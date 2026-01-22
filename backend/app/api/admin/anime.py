@@ -10,14 +10,13 @@ These endpoints provide CMS-level anime management with:
 """
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...dependencies import get_db, get_current_user
 from ...models.user import User
 from ...schemas.anime_admin import (
     AnimeAdminListFilter,
-    AnimeAdminListItem,
     AnimeAdminDetail,
     AnimeAdminUpdate,
     AnimeAdminUpdateResponse,

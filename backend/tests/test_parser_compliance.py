@@ -26,7 +26,6 @@ from app.models.base import Base
 from app.models.episode import Episode
 from app.models.release import Release
 from app.parser.domain.errors import (
-    EntityLockedError,
     ParserCannotOverrideManualError,
 )
 from app.parser.services.publish_service import ParserPublishService
