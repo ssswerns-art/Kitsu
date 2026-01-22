@@ -5,6 +5,7 @@ from fastapi import HTTPException, status
 from ...crud.permission import PermissionRepository
 from ...models.user import User
 from ...auth import rbac_contract
+from ...database import AsyncSessionLocal
 
 
 class PermissionService:
@@ -165,16 +166,19 @@ class PermissionService:
             HTTPException: 403 Forbidden if permission is denied
         """
         if not await self.has_permission(user, permission_name, actor_type):
-            # SECURITY: Log permission denial to audit
+            # SECURITY: Log permission denial to audit in ISOLATED transaction
+            # Use a separate session to prevent commit leakage to main transaction
             # Import here to avoid circular dependency
             from ...services.audit.audit_service import AuditService
-            audit_service = AuditService(self.session)
             try:
-                await audit_service.log_permission_denied(
-                    permission=permission_name,
-                    actor=user,
-                    actor_type=actor_type
-                )
+                async with AsyncSessionLocal() as audit_session:
+                    audit_service = AuditService(audit_session)
+                    await audit_service.log_permission_denied(
+                        permission=permission_name,
+                        actor=user,
+                        actor_type=actor_type
+                    )
+                    await audit_session.commit()
             except Exception:
                 # Don't fail the permission check if audit logging fails
                 # (logging failures shouldn't bypass security)
