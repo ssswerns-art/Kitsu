@@ -1,8 +1,9 @@
 """
 Centralized Admin Router - READ-ONLY endpoints.
 
-PHASE 5: READ-ONLY admin API with contracts wired.
-All endpoints return mock data without database access or RBAC enforcement.
+PHASE 6: READ-ONLY admin API with permissions wired (NO enforcement).
+All endpoints return mock data without database access.
+Permission dependencies are present but do not enforce access control.
 
 NOTE: No enforcement in this phase. Mock data only.
 """
@@ -11,13 +12,14 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from app.admin.contracts.parser import ParserStatusRead, ParserJobStatusRead
 from app.admin.contracts.permissions import AdminPermission
 from app.admin.contracts.roles import AdminRoleList, AdminRoleRead
 from app.admin.contracts.system import SystemHealthRead, SystemComponentStatus
 from app.admin.contracts.users import AdminUserList, AdminUserRead, AdminUserShort
+from app.admin.dependencies import require_admin_permission
 
 # Create admin router with READ-ONLY endpoints
 router = APIRouter(
@@ -27,12 +29,16 @@ router = APIRouter(
 
 
 @router.get("/users", response_model=AdminUserList)
-async def list_users() -> AdminUserList:
+async def list_users(
+    _: None = Depends(require_admin_permission(AdminPermission.USERS_VIEW)),
+) -> AdminUserList:
     """
     List all users (READ-ONLY, mock data).
     
     Returns paginated list of users with mock data.
-    No database access, no RBAC enforcement.
+    No database access, no RBAC enforcement (PHASE 6).
+    
+    Required permission: USERS_VIEW (wired but not enforced)
     """
     # Mock data - no database access
     mock_users = [
@@ -57,12 +63,17 @@ async def list_users() -> AdminUserList:
 
 
 @router.get("/users/{user_id}", response_model=AdminUserRead)
-async def get_user(user_id: UUID) -> AdminUserRead:
+async def get_user(
+    user_id: UUID,
+    _: None = Depends(require_admin_permission(AdminPermission.USERS_VIEW)),
+) -> AdminUserRead:
     """
     Get user details (READ-ONLY, mock data).
     
     Returns complete user information with mock data.
-    No database access, no RBAC enforcement.
+    No database access, no RBAC enforcement (PHASE 6).
+    
+    Required permission: USERS_VIEW (wired but not enforced)
     """
     # Mock data - no database access
     return AdminUserRead(
@@ -76,12 +87,16 @@ async def get_user(user_id: UUID) -> AdminUserRead:
 
 
 @router.get("/roles", response_model=AdminRoleList)
-async def list_roles() -> AdminRoleList:
+async def list_roles(
+    _: None = Depends(require_admin_permission(AdminPermission.ROLES_VIEW)),
+) -> AdminRoleList:
     """
     List all roles (READ-ONLY, mock data).
     
     Returns list of roles with mock data.
-    No database access, no RBAC enforcement.
+    No database access, no RBAC enforcement (PHASE 6).
+    
+    Required permission: ROLES_VIEW (wired but not enforced)
     """
     # Mock data - no database access
     mock_roles = [
@@ -112,24 +127,32 @@ async def list_roles() -> AdminRoleList:
 
 
 @router.get("/permissions", response_model=list[AdminPermission])
-async def list_permissions() -> list[AdminPermission]:
+async def list_permissions(
+    _: None = Depends(require_admin_permission(AdminPermission.ROLES_VIEW)),
+) -> list[AdminPermission]:
     """
     List all permissions (READ-ONLY, mock data).
     
     Returns list of all available admin permissions.
-    No database access, no RBAC enforcement.
+    No database access, no RBAC enforcement (PHASE 6).
+    
+    Required permission: ROLES_VIEW (wired but not enforced)
     """
     # Return all available permissions from enum
     return list(AdminPermission)
 
 
 @router.get("/parser/status", response_model=ParserStatusRead)
-async def get_parser_status() -> ParserStatusRead:
+async def get_parser_status(
+    _: None = Depends(require_admin_permission(AdminPermission.PARSER_VIEW)),
+) -> ParserStatusRead:
     """
     Get parser status (READ-ONLY, mock data).
     
     Returns parser system status with mock data.
-    No database access, no RBAC enforcement.
+    No database access, no RBAC enforcement (PHASE 6).
+    
+    Required permission: PARSER_VIEW (wired but not enforced)
     """
     # Mock data - no database access
     mock_jobs = [
@@ -165,7 +188,9 @@ async def get_system_health() -> SystemHealthRead:
     Get system health (READ-ONLY, mock data).
     
     Returns system health status with mock data.
-    No database access, no RBAC enforcement.
+    No database access, no RBAC enforcement (PHASE 6).
+    
+    NOTE: No permission required - system health monitoring endpoint.
     """
     # Mock data - no database access
     mock_components = [
