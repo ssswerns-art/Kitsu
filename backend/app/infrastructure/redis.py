@@ -366,7 +366,8 @@ def get_redis() -> RedisClient:
     
     Note: This function does not acquire the lock because it's a read-only
     operation and we want to allow concurrent access to the initialized client.
-    The state check is atomic due to Python's GIL.
+    The enum comparison is atomic, though the state could change after the check
+    (which is acceptable since init/close operations are designed to be safe).
     
     Returns:
         Redis client instance
@@ -385,3 +386,14 @@ def get_redis() -> RedisClient:
         raise RuntimeError("Redis client is None despite INITIALIZED state (internal error)")
     
     return _redis_client
+
+
+def _reset_for_testing() -> None:
+    """Reset Redis singleton state for testing purposes.
+    
+    WARNING: This function is only for use in tests. It directly manipulates
+    internal state without acquiring locks and should never be used in production code.
+    """
+    global _redis_client, _redis_state
+    _redis_client = None
+    _redis_state = _RedisLifecycleState.UNINITIALIZED

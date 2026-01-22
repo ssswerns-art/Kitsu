@@ -17,8 +17,7 @@ from app.infrastructure import redis
 async def test_init_redis_is_idempotent() -> None:
     """Test that calling init_redis() multiple times is safe and returns same client."""
     # Reset state for this test
-    redis._redis_client = None
-    redis._redis_state = redis._RedisLifecycleState.UNINITIALIZED
+    redis._reset_for_testing()
     
     # Mock Redis URL (we'll use a fake one since we're testing lifecycle, not actual connection)
     redis_url = "redis://localhost:6379/0"
@@ -42,8 +41,7 @@ async def test_init_redis_is_idempotent() -> None:
 async def test_close_redis_is_idempotent() -> None:
     """Test that calling close_redis() multiple times is safe."""
     # Reset state for this test
-    redis._redis_client = None
-    redis._redis_state = redis._RedisLifecycleState.UNINITIALIZED
+    redis._reset_for_testing()
     
     redis_url = "redis://localhost:6379/0"
     
@@ -62,16 +60,14 @@ async def test_close_redis_is_idempotent() -> None:
         
     finally:
         # Ensure cleanup
-        redis._redis_client = None
-        redis._redis_state = redis._RedisLifecycleState.UNINITIALIZED
+        redis._reset_for_testing()
 
 
 @pytest.mark.anyio
 async def test_close_without_init_is_safe() -> None:
     """Test that calling close_redis() without init is safe."""
     # Reset state for this test
-    redis._redis_client = None
-    redis._redis_state = redis._RedisLifecycleState.UNINITIALIZED
+    redis._reset_for_testing()
     
     # Should not raise any error
     await redis.close_redis()
@@ -83,8 +79,7 @@ async def test_close_without_init_is_safe() -> None:
 async def test_get_redis_after_close_raises_error() -> None:
     """Test that get_redis() raises error after close_redis()."""
     # Reset state for this test
-    redis._redis_client = None
-    redis._redis_state = redis._RedisLifecycleState.UNINITIALIZED
+    redis._reset_for_testing()
     
     redis_url = "redis://localhost:6379/0"
     
@@ -104,16 +99,14 @@ async def test_get_redis_after_close_raises_error() -> None:
             
     finally:
         # Cleanup
-        redis._redis_client = None
-        redis._redis_state = redis._RedisLifecycleState.UNINITIALIZED
+        redis._reset_for_testing()
 
 
 @pytest.mark.anyio
 async def test_get_redis_before_init_raises_error() -> None:
     """Test that get_redis() raises error before init_redis()."""
     # Reset state for this test
-    redis._redis_client = None
-    redis._redis_state = redis._RedisLifecycleState.UNINITIALIZED
+    redis._reset_for_testing()
     
     # Should raise error when uninitialized
     with pytest.raises(RuntimeError, match="not available.*UNINITIALIZED"):
@@ -124,8 +117,7 @@ async def test_get_redis_before_init_raises_error() -> None:
 async def test_reinit_after_close_is_allowed() -> None:
     """Test that init_redis() can be called again after close_redis()."""
     # Reset state for this test
-    redis._redis_client = None
-    redis._redis_state = redis._RedisLifecycleState.UNINITIALIZED
+    redis._reset_for_testing()
     
     redis_url = "redis://localhost:6379/0"
     
@@ -154,8 +146,7 @@ async def test_reinit_after_close_is_allowed() -> None:
 async def test_concurrent_init_is_safe() -> None:
     """Test that concurrent calls to init_redis() don't create multiple clients."""
     # Reset state for this test
-    redis._redis_client = None
-    redis._redis_state = redis._RedisLifecycleState.UNINITIALIZED
+    redis._reset_for_testing()
     
     redis_url = "redis://localhost:6379/0"
     
@@ -180,8 +171,7 @@ async def test_concurrent_init_is_safe() -> None:
 async def test_concurrent_close_is_safe() -> None:
     """Test that concurrent calls to close_redis() are safe."""
     # Reset state for this test
-    redis._redis_client = None
-    redis._redis_state = redis._RedisLifecycleState.UNINITIALIZED
+    redis._reset_for_testing()
     
     redis_url = "redis://localhost:6379/0"
     
@@ -198,16 +188,14 @@ async def test_concurrent_close_is_safe() -> None:
         
     finally:
         # Ensure cleanup
-        redis._redis_client = None
-        redis._redis_state = redis._RedisLifecycleState.UNINITIALIZED
+        redis._reset_for_testing()
 
 
 @pytest.mark.anyio
 async def test_concurrent_init_and_close() -> None:
     """Test that concurrent init and close operations don't cause race conditions."""
     # Reset state for this test
-    redis._redis_client = None
-    redis._redis_state = redis._RedisLifecycleState.UNINITIALIZED
+    redis._reset_for_testing()
     
     redis_url = "redis://localhost:6379/0"
     
@@ -235,8 +223,7 @@ async def test_concurrent_init_and_close() -> None:
 async def test_state_transitions_are_correct() -> None:
     """Test that state transitions follow the documented contract."""
     # Reset state for this test
-    redis._redis_client = None
-    redis._redis_state = redis._RedisLifecycleState.UNINITIALIZED
+    redis._reset_for_testing()
     
     redis_url = "redis://localhost:6379/0"
     
