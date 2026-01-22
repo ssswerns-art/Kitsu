@@ -69,8 +69,8 @@ def require_admin_permission(permission: AdminPermission) -> Callable:
                     before=None,
                     after={
                         "required_permissions": [permission.value],
-                        "request_method": request.method if hasattr(request, "method") else None,
-                        "request_path": request.url.path if hasattr(request, "url") else None,
+                        "request_method": request.method,
+                        "request_path": request.url.path,
                     },
                 )
             except Exception:
@@ -132,8 +132,8 @@ def require_admin_permissions(*permissions: AdminPermission) -> Callable:
                     before=None,
                     after={
                         "required_permissions": permission_names,
-                        "request_method": request.method if hasattr(request, "method") else None,
-                        "request_path": request.url.path if hasattr(request, "url") else None,
+                        "request_method": request.method,
+                        "request_path": request.url.path,
                     },
                 )
             except Exception:
