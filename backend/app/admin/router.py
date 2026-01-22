@@ -1,11 +1,18 @@
 """
-Centralized Admin Router - READ-ONLY endpoints.
+Centralized Admin Router - READ and WRITE endpoints.
 
 PHASE 6: READ-ONLY admin API with permissions wired (NO enforcement).
 All endpoints return mock data without database access.
 Permission dependencies are present but do not enforce access control.
 
-NOTE: No enforcement in this phase. Mock data only.
+PHASE 7: RBAC enforcement enabled. All endpoints verify permissions.
+
+PHASE 8: WRITE endpoints added with audit logging.
+- POST /admin/users/{user_id}/roles - Update user roles
+- POST /admin/roles/assign - Bulk role assignment
+All write actions are audited with fire-and-forget logging.
+
+NOTE: Write endpoints are stubs with TODO comments for DB logic.
 """
 from __future__ import annotations
 
