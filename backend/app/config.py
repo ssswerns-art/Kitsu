@@ -1,5 +1,6 @@
 import json
 import os
+import threading
 from urllib.parse import urlparse
 
 from dotenv import load_dotenv
@@ -136,6 +137,7 @@ class Settings(BaseModel):
 # Deferred settings initialization to avoid import-time side effects (ISSUE #6)
 # Settings validation will happen during application startup, not module import
 _settings_instance: Settings | None = None
+_settings_lock = threading.Lock()
 
 
 def get_settings() -> Settings:
@@ -152,7 +154,9 @@ def get_settings() -> Settings:
     """
     global _settings_instance
     if _settings_instance is None:
-        _settings_instance = Settings.from_env()
+        with _settings_lock:
+            if _settings_instance is None:
+                _settings_instance = Settings.from_env()
     return _settings_instance
 
 
