@@ -1,6 +1,6 @@
+import asyncio
 import json
 import os
-import threading
 from urllib.parse import urlparse
 
 from dotenv import load_dotenv
@@ -137,7 +137,7 @@ class Settings(BaseModel):
 # Deferred settings initialization to avoid import-time side effects (ISSUE #6)
 # Settings validation will happen during application startup, not module import
 _settings_instance: Settings | None = None
-_settings_lock = threading.Lock()
+_settings_lock = asyncio.Lock()
 
 
 def get_settings() -> Settings:
@@ -153,10 +153,31 @@ def get_settings() -> Settings:
         ValueError: If required environment variables are missing or invalid
     """
     global _settings_instance
-    if _settings_instance is None:
-        with _settings_lock:
+    
+    # Fast path: already initialized
+    if _settings_instance is not None:
+        return _settings_instance
+    
+    # Double-checked locking with asyncio.Lock
+    async def _init_with_lock():
+        global _settings_instance
+        async with _settings_lock:
             if _settings_instance is None:
                 _settings_instance = Settings.from_env()
+    
+    # Check if we're in an async context
+    try:
+        asyncio.get_running_loop()
+        # Inside running loop - initialize directly (lock can't be used here)
+        # This path is for sync code called from within async context
+        if _settings_instance is None:
+            _settings_instance = Settings.from_env()
+    except RuntimeError:
+        # No running loop - sync context (typical startup path)
+        # Use asyncio.run() to properly use the async lock
+        if _settings_instance is None:
+            asyncio.run(_init_with_lock())
+    
     return _settings_instance
 
 
