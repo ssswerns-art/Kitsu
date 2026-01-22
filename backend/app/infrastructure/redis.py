@@ -360,40 +360,13 @@ async def close_redis() -> None:
 def get_redis() -> RedisClient:
     """Get the global async Redis client.
     
-    This function checks the lifecycle state and ensures the client is
-    initialized before returning it. It will never return a closed or
-    uninitialized client.
-    
-    Note: This function does not acquire the lock because it's a read-only
-    operation and we want to allow concurrent access to the initialized client.
-    The enum comparison is atomic, though the state could change after the check
-    (which is acceptable since init/close operations are designed to be safe).
-    
     Returns:
         Redis client instance
         
     Raises:
-        RuntimeError: If Redis client not initialized or has been closed
+        RuntimeError: If Redis client not initialized
     """
-    if _redis_state != _RedisLifecycleState.INITIALIZED:
-        raise RuntimeError(
-            f"Redis client not available (state: {_redis_state.name}). "
-            "Call init_redis() first and ensure it hasn't been closed."
-        )
-    
-    if _redis_client is None:
-        # This should never happen if state is INITIALIZED, but we check defensively
-        raise RuntimeError("Redis client is None despite INITIALIZED state (internal error)")
-    
+    # CONTRACT: get_redis() MUST NOT be called before init_redis()
+    if _redis_state != _RedisLifecycleState.INITIALIZED or _redis_client is None:
+        raise RuntimeError("Redis client not initialized. Call init_redis() first.")
     return _redis_client
-
-
-def _reset_for_testing() -> None:
-    """Reset Redis singleton state for testing purposes.
-    
-    WARNING: This function is only for use in tests. It directly manipulates
-    internal state without acquiring locks and should never be used in production code.
-    """
-    global _redis_client, _redis_state
-    _redis_client = None
-    _redis_state = _RedisLifecycleState.UNINITIALIZED
