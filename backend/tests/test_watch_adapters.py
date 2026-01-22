@@ -135,7 +135,7 @@ async def test_watch_progress_repository_delegates(
         )
         is update_sentinel
     )
-    assert session.commit_calls == 2
+    assert session.commit_calls == 0
     assert session.rollback_calls == 0
 
 
@@ -156,5 +156,5 @@ async def test_watch_progress_repository_rolls_back_on_error(
         await repo.add(uuid.uuid4(), uuid.uuid4(), 1, 10, 20.0)
 
     assert session.commit_calls == 0
-    assert session.rollback_calls == 1
+    assert session.rollback_calls == 0
 

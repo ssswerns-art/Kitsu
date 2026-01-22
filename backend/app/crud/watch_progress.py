@@ -137,23 +137,18 @@ class WatchProgressRepository(WatchProgressRepositoryPort):
         created_at: datetime | None = None,
         last_watched_at: datetime | None = None,
     ) -> WatchProgressData:
-        try:
-            progress = await create_watch_progress(
-                self._session,
-                user_id,
-                anime_id,
-                episode,
-                position_seconds,
-                progress_percent,
-                progress_id=progress_id,
-                created_at=created_at,
-                last_watched_at=last_watched_at,
-            )
-            await self._session.commit()
-            return progress
-        except Exception:
-            await self._session.rollback()
-            raise
+        progress = await create_watch_progress(
+            self._session,
+            user_id,
+            anime_id,
+            episode,
+            position_seconds,
+            progress_percent,
+            progress_id=progress_id,
+            created_at=created_at,
+            last_watched_at=last_watched_at,
+        )
+        return progress
 
     async def update(
         self,
@@ -164,17 +159,12 @@ class WatchProgressRepository(WatchProgressRepositoryPort):
         *,
         last_watched_at: datetime | None = None,
     ) -> WatchProgressData:
-        try:
-            updated = await update_watch_progress(
-                self._session,
-                progress,
-                episode,
-                position_seconds,
-                progress_percent,
-                last_watched_at=last_watched_at,
-            )
-            await self._session.commit()
-            return updated
-        except Exception:
-            await self._session.rollback()
-            raise
+        updated = await update_watch_progress(
+            self._session,
+            progress,
+            episode,
+            position_seconds,
+            progress_percent,
+            last_watched_at=last_watched_at,
+        )
+        return updated
