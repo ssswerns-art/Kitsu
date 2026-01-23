@@ -166,9 +166,9 @@ class ParserPublishService:
                 str(anime_id),
                 bound_by=bound_by,
             )
-        await self._session.commit()
         
         # COMPLIANCE CHECK 4: Audit logging (MANDATORY)
+        # NOTE: Audit logging MUST happen BEFORE commit to ensure atomicity
         after_state = {**payload, "id": str(anime_id)}
         if created:
             await self._audit_service.log_create(
@@ -200,6 +200,7 @@ class ParserPublishService:
                 reason=f"Automatic sync from external source {anime_external_id}",
             )
         
+        # Caller is responsible for committing the transaction
         logger.info(f"[PARSER] Successfully {'created' if created else 'updated'} anime {anime_id}")
         return {"anime_id": str(anime_id), "created": created}
 
@@ -297,9 +298,9 @@ class ParserPublishService:
             translations,
             qualities,
         )
-        await self._session.commit()
         
         # COMPLIANCE CHECK 5: Audit logging (MANDATORY)
+        # NOTE: Audit logging MUST happen BEFORE commit to ensure atomicity
         after_state = {
             "id": str(episode_id),
             "release_id": str(release_id),
@@ -339,6 +340,7 @@ class ParserPublishService:
                 reason=f"Automatic sync from external source {binding_external_id}",
             )
         
+        # Caller is responsible for committing the transaction
         logger.info(
             f"[PARSER] Successfully {'created' if created else 'updated'} "
             f"episode {episode_number} for anime {anime_id}"
@@ -358,7 +360,7 @@ class ParserPublishService:
                 self._episode_table.c.number == episode_number,
             )
         )
-        await self._session.commit()
+        # Caller is responsible for committing the transaction
         return True
 
     async def preview_diff(self, anime_external_id: int) -> dict[str, object]:

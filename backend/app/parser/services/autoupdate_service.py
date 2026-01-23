@@ -152,7 +152,7 @@ class ParserEpisodeAutoupdateService:
                 "errors": [error_message],
             }
         await self._finish_job(job_id, kodik.id, "success", None)
-        await self._session.commit()
+        # Caller is responsible for committing the transaction
         return summary
 
     async def _run_autoupdate(

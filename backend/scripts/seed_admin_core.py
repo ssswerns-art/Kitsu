@@ -184,8 +184,9 @@ ROLE_PERMISSIONS = {
 async def seed_admin_core():
     """Seed the database with default roles and permissions per SECURITY-01 contract."""
     async with AsyncSessionLocal() as session:
-        role_repo = RoleRepository(session)
-        permission_repo = PermissionRepository(session)
+        async with session.begin():
+            role_repo = RoleRepository(session)
+            permission_repo = PermissionRepository(session)
         
         print("SECURITY-01: Seeding RBAC contract-compliant data...")
         print(f"  Actor types: {', '.join(rbac_contract.ALLOWED_ACTOR_TYPES)}")
@@ -276,13 +277,13 @@ async def seed_admin_core():
                     print(f"  Warning: Could not assign '{perm_name}' to '{role_name}': {e}")
             
             print(f"  ✓ Assigned {len(permission_names)} permissions to '{role_name}'")
-        
-        print("\n✅ SECURITY-01: RBAC contract seeding completed successfully!")
-        print("\nSECURITY SUMMARY:")
-        print("  ✓ No wildcard permissions (admin:*, parser:*, system:*)")
-        print("  ✓ System roles separated from user roles")
-        print("  ✓ Parser ≠ Admin invariant enforced")
-        print("  ✓ All permissions explicit and contract-compliant")
+            
+            print("\n✅ SECURITY-01: RBAC contract seeding completed successfully!")
+            print("\nSECURITY SUMMARY:")
+            print("  ✓ No wildcard permissions (admin:*, parser:*, system:*)")
+            print("  ✓ System roles separated from user roles")
+            print("  ✓ Parser ≠ Admin invariant enforced")
+            print("  ✓ All permissions explicit and contract-compliant")
 
 
 if __name__ == "__main__":

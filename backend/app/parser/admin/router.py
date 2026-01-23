@@ -252,7 +252,8 @@ async def publish_anime_external(
 ) -> ParserPublishAnimeRead:
     service = ParserPublishService(session)
     try:
-        result = await service.publish_anime(external_id)
+        async with session.begin():
+            result = await service.publish_anime(external_id)
     except PublishNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
@@ -268,7 +269,8 @@ async def publish_episode_external(
 ) -> ParserPublishEpisodeRead:
     service = ParserPublishService(session)
     try:
-        result = await service.publish_episode(payload.anime_id, payload.episode_number)
+        async with session.begin():
+            result = await service.publish_episode(payload.anime_id, payload.episode_number)
     except PublishNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
@@ -319,7 +321,8 @@ async def run_parser_sync(
         catalog_source, episode_source, schedule_source, session=session
     )
     persist = payload.mode == "persist"
-    return await service.sync_all(persist=persist, publish=False)
+    async with session.begin():
+        return await service.sync_all(persist=persist, publish=False)
 
 
 @router.post("/run/autoupdate")
@@ -328,7 +331,8 @@ async def run_parser_autoupdate(
     _: None = Depends(require_permission("admin:parser.settings")),
 ) -> dict[str, object]:
     service = ParserEpisodeAutoupdateService(session=session)
-    return await service.run(force=True)
+    async with session.begin():
+        return await service.run(force=True)
 
 
 @router.get("/settings", response_model=ParserSettingsRead)

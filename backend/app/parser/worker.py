@@ -239,29 +239,30 @@ class ParserWorker:
             )
             return
         
+        db_job_id = None
         try:
-            # Double-check mode before queueing
-            current_settings = await get_parser_settings(session)
-            if current_settings.mode != "auto":
-                logger.warning("Mode changed to manual during cycle, aborting catalog sync")
-                return
-            
-            db_job_id = await self._create_job(session, source["id"], "catalog_sync")
-            
-            # Execute catalog sync
-            catalog_source = ShikimoriCatalogSource(settings)
-            sync_service = ParserSyncService(
-                catalog_source=catalog_source,
-                episode_source=None,  # type: ignore
-                schedule_source=None,  # type: ignore
-                session=session,
-            )
-            
-            # Sync catalog - respect autopublish setting
-            result = sync_service.sync_all(persist=True, publish=settings.autopublish_enabled)
-            
-            await self._finish_job(session, db_job_id, source["id"], "success", None)
-            await session.commit()
+            async with session.begin():
+                # Double-check mode before queueing
+                current_settings = await get_parser_settings(session)
+                if current_settings.mode != "auto":
+                    logger.warning("Mode changed to manual during cycle, aborting catalog sync")
+                    return
+                
+                db_job_id = await self._create_job(session, source["id"], "catalog_sync")
+                
+                # Execute catalog sync
+                catalog_source = ShikimoriCatalogSource(settings)
+                sync_service = ParserSyncService(
+                    catalog_source=catalog_source,
+                    episode_source=None,  # type: ignore
+                    schedule_source=None,  # type: ignore
+                    session=session,
+                )
+                
+                # Sync catalog - respect autopublish setting
+                result = sync_service.sync_all(persist=True, publish=settings.autopublish_enabled)
+                
+                await self._finish_job(session, db_job_id, source["id"], "success", None)
             
             logger.info(
                 "Catalog sync completed",
@@ -273,9 +274,14 @@ class ParserWorker:
                 exc_info=exc,
                 extra={"source": source["code"]}
             )
-            await self._log_job_error(session, db_job_id, str(exc))
-            await self._finish_job(session, db_job_id, source["id"], "failed", str(exc))
-            await session.commit()
+            # Log error in separate transaction if job was created
+            if db_job_id is not None:
+                try:
+                    async with session.begin():
+                        await self._log_job_error(session, db_job_id, str(exc))
+                        await self._finish_job(session, db_job_id, source["id"], "failed", str(exc))
+                except Exception as log_exc:
+                    logger.error(f"Failed to log job error: {log_exc}")
         finally:
             # Mark job as complete in Redis
             await redis.mark_job_complete(job_id_key)
@@ -303,21 +309,22 @@ class ParserWorker:
             logger.info("Episode autoupdate already running, skipping")
             return
         
+        db_job_id = None
         try:
-            # Double-check mode before queueing
-            current_settings = await get_parser_settings(session)
-            if current_settings.mode != "auto":
-                logger.warning("Mode changed to manual during cycle, aborting autoupdate")
-                return
-            
-            db_job_id = await self._create_job(session, kodik_source["id"], "episode_autoupdate")
-            
-            # Execute episode autoupdate
-            autoupdate_service = ParserEpisodeAutoupdateService(session=session, settings=settings)
-            result = await autoupdate_service.run(force=False)
-            
-            await self._finish_job(session, db_job_id, kodik_source["id"], "success", None)
-            await session.commit()
+            async with session.begin():
+                # Double-check mode before queueing
+                current_settings = await get_parser_settings(session)
+                if current_settings.mode != "auto":
+                    logger.warning("Mode changed to manual during cycle, aborting autoupdate")
+                    return
+                
+                db_job_id = await self._create_job(session, kodik_source["id"], "episode_autoupdate")
+                
+                # Execute episode autoupdate
+                autoupdate_service = ParserEpisodeAutoupdateService(session=session, settings=settings)
+                result = await autoupdate_service.run(force=False)
+                
+                await self._finish_job(session, db_job_id, kodik_source["id"], "success", None)
             
             logger.info(
                 "Episode autoupdate completed",
@@ -328,9 +335,14 @@ class ParserWorker:
                 "Episode autoupdate failed",
                 exc_info=exc,
             )
-            await self._log_job_error(session, db_job_id, str(exc))
-            await self._finish_job(session, db_job_id, kodik_source["id"], "failed", str(exc))
-            await session.commit()
+            # Log error in separate transaction if job was created
+            if db_job_id is not None:
+                try:
+                    async with session.begin():
+                        await self._log_job_error(session, db_job_id, str(exc))
+                        await self._finish_job(session, db_job_id, kodik_source["id"], "failed", str(exc))
+                except Exception as log_exc:
+                    logger.error(f"Failed to log job error: {log_exc}")
         finally:
             # Mark job as complete in Redis
             await redis.mark_job_complete(job_id_key)
@@ -399,37 +411,36 @@ class ParserWorker:
         )
         
         async with self._session_maker() as session:
-            # Get settings ID
-            result = await session.execute(select(settings_table.c.id).limit(1))
-            settings_id = result.scalar_one_or_none()
-            
-            if settings_id is None:
-                logger.error("Cannot switch mode: settings not initialized")
-                return
-            
-            # Switch to manual mode
-            await session.execute(
-                update(settings_table)
-                .where(settings_table.c.id == settings_id)
-                .values(mode="manual", updated_at=datetime.now(timezone.utc))
-            )
-            
-            # Log to audit trail
-            audit_service = AuditService(session)
-            await audit_service.log(
-                action="parser.emergency_mode_switch",
-                entity_type="parser_settings",
-                entity_id=str(settings_id),
-                actor=None,
-                actor_type="system",
-                before={"mode": "auto"},
-                after={"mode": "manual"},
-                reason=f"Emergency: {reason} - {details}",
-                ip_address=None,
-                user_agent="parser_worker",
-            )
-            
-            await session.commit()
+            async with session.begin():
+                # Get settings ID
+                result = await session.execute(select(settings_table.c.id).limit(1))
+                settings_id = result.scalar_one_or_none()
+                
+                if settings_id is None:
+                    logger.error("Cannot switch mode: settings not initialized")
+                    return
+                
+                # Switch to manual mode
+                await session.execute(
+                    update(settings_table)
+                    .where(settings_table.c.id == settings_id)
+                    .values(mode="manual", updated_at=datetime.now(timezone.utc))
+                )
+                
+                # Log to audit trail
+                audit_service = AuditService(session)
+                await audit_service.log(
+                    action="parser.emergency_mode_switch",
+                    entity_type="parser_settings",
+                    entity_id=str(settings_id),
+                    actor=None,
+                    actor_type="system",
+                    before={"mode": "auto"},
+                    after={"mode": "manual"},
+                    reason=f"Emergency: {reason} - {details}",
+                    ip_address=None,
+                    user_agent="parser_worker",
+                )
 
 
 async def run_worker() -> None:

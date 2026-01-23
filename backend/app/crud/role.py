@@ -19,7 +19,7 @@ class RoleRepository:
             is_system=is_system,
         )
         self.session.add(role)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(role)
         return role
 
@@ -40,14 +40,14 @@ class RoleRepository:
         return list(result.scalars().all())
 
     async def update(self, role: Role) -> Role:
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(role)
         return role
 
     async def assign_permission(self, role_id: uuid.UUID, permission_id: uuid.UUID) -> RolePermission:
         role_permission = RolePermission(role_id=role_id, permission_id=permission_id)
         self.session.add(role_permission)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(role_permission)
         return role_permission
 
@@ -61,12 +61,12 @@ class RoleRepository:
         role_permission = result.scalar_one_or_none()
         if role_permission:
             await self.session.delete(role_permission)
-            await self.session.commit()
+            await self.session.flush()
 
     async def assign_to_user(self, user_id: uuid.UUID, role_id: uuid.UUID, granted_by: uuid.UUID | None = None) -> UserRole:
         user_role = UserRole(user_id=user_id, role_id=role_id, granted_by=granted_by)
         self.session.add(user_role)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(user_role)
         return user_role
 
@@ -80,7 +80,7 @@ class RoleRepository:
         user_role = result.scalar_one_or_none()
         if user_role:
             await self.session.delete(user_role)
-            await self.session.commit()
+            await self.session.flush()
 
     async def get_user_roles(self, user_id: uuid.UUID) -> list[Role]:
         result = await self.session.execute(

@@ -216,107 +216,108 @@ class AnimeAdminService:
         Raises:
             HTTPException: If validation fails
         """
-        # Permission check
+        # Permission check (outside transaction)
         await self.permission_service.require_permission(actor, "anime.edit")
         
-        # Get anime
-        anime = await get_anime_by_id_admin(self.session, anime_id)
-        if not anime:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Anime not found"
-            )
-        
-        # Check if deleted
-        if anime.is_deleted:
-            raise HTTPException(
-                status_code=status.HTTP_410_GONE,
-                detail="Cannot update deleted anime"
-            )
-        
-        # Get fields to update
-        update_dict = update.model_dump(exclude_unset=True, exclude={"reason"})
-        fields_to_update = list(update_dict.keys())
-        
-        if not fields_to_update:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No fields to update"
-            )
-        
-        # Lock check
-        has_override = await self.permission_service.has_permission(
-            actor, "anime.override_lock"
-        )
-        LockService.check_lock(
-            anime,
-            fields_to_update,
-            actor=actor,
-            has_override_permission=has_override,
-        )
-        
-        # Parser protection check
-        LockService.check_parser_update(anime, fields_to_update, actor_type)
-        
-        # State transition validation
-        if "state" in update_dict:
-            new_state = update_dict["state"]
-            if not validate_state_transition(anime.state, new_state):
+        # All database operations in a single transaction
+        async with self.session.begin():
+            # Get anime
+            anime = await get_anime_by_id_admin(self.session, anime_id)
+            if not anime:
                 raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Invalid state transition from {anime.state} to {new_state}"
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Anime not found"
                 )
             
-            # Additional validation: cannot publish without video
-            if new_state == "published":
-                has_video = await check_anime_has_video(self.session, anime.id)
-                if not has_video:
+            # Check if deleted
+            if anime.is_deleted:
+                raise HTTPException(
+                    status_code=status.HTTP_410_GONE,
+                    detail="Cannot update deleted anime"
+                )
+            
+            # Get fields to update
+            update_dict = update.model_dump(exclude_unset=True, exclude={"reason"})
+            fields_to_update = list(update_dict.keys())
+            
+            if not fields_to_update:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="No fields to update"
+                )
+            
+            # Lock check
+            has_override = await self.permission_service.has_permission(
+                actor, "anime.override_lock"
+            )
+            LockService.check_lock(
+                anime,
+                fields_to_update,
+                actor=actor,
+                has_override_permission=has_override,
+            )
+            
+            # Parser protection check
+            LockService.check_parser_update(anime, fields_to_update, actor_type)
+            
+            # State transition validation
+            if "state" in update_dict:
+                new_state = update_dict["state"]
+                if not validate_state_transition(anime.state, new_state):
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
-                        detail="Cannot publish anime without video content"
+                        detail=f"Invalid state transition from {anime.state} to {new_state}"
                     )
+                
+                # Additional validation: cannot publish without video
+                if new_state == "published":
+                    has_video = await check_anime_has_video(self.session, anime.id)
+                    if not has_video:
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="Cannot publish anime without video content"
+                        )
+            
+            # Capture before state for audit
+            before_data = LockService.serialize_entity(anime)
+            
+            # Update anime
+            actor_id = actor.id if actor else None
+            updated_anime = await update_anime_admin(
+                self.session,
+                anime,
+                update_dict,
+                actor_id=actor_id,
+            )
+            
+            # Auto-detect broken state
+            warnings = []
+            state_changed, reason = await auto_update_broken_state(
+                self.session,
+                updated_anime,
+            )
+            if state_changed:
+                warnings.append(reason)
+            
+            # Capture after state for audit
+            after_data = LockService.serialize_entity(updated_anime)
+            
+            # Create audit log
+            audit_log = await self.audit_service.log_update(
+                entity_type="anime",
+                entity_id=anime_id,
+                before_data=before_data,
+                after_data=after_data,
+                actor=actor,
+                actor_type=actor_type,
+                reason=update.reason,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+            
+            # Transaction commits here automatically
         
-        # Capture before state for audit
-        before_data = LockService.serialize_entity(anime)
-        
-        # Update anime
-        actor_id = actor.id if actor else None
-        updated_anime = await update_anime_admin(
-            self.session,
-            anime,
-            update_dict,
-            actor_id=actor_id,
-        )
-        
-        # Auto-detect broken state
-        warnings = []
-        state_changed, reason = await auto_update_broken_state(
-            self.session,
-            updated_anime,
-        )
-        if state_changed:
-            warnings.append(reason)
-        
-        # Capture after state for audit
-        after_data = LockService.serialize_entity(updated_anime)
-        
-        # Create audit log
-        audit_log = await self.audit_service.log_update(
-            entity_type="anime",
-            entity_id=anime_id,
-            before_data=before_data,
-            after_data=after_data,
-            actor=actor,
-            actor_type=actor_type,
-            reason=update.reason,
-            ip_address=ip_address,
-            user_agent=user_agent,
-        )
-        
-        # Commit transaction
-        await self.session.commit()
-        
-        # Get fresh anime detail
+        # Get fresh anime detail (outside transaction)
         anime_detail = await self.get_anime(anime_id, actor)
         
         # Return response with audit log ID

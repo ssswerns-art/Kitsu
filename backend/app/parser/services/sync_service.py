@@ -34,7 +34,10 @@ def _insert_for(session: AsyncSession):
 
 
 async def _commit(session: AsyncSession) -> None:
-    await session.commit()
+    # Removed: Caller is responsible for transaction management
+    # This was previously used to commit, but now transactions should be
+    # managed at the service boundary (router or worker level)
+    pass
 
 
 def _normalize_setting_list(value: Any) -> list[str]:
