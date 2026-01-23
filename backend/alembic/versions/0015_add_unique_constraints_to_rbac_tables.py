@@ -27,16 +27,16 @@ def upgrade() -> None:
     """Apply schema changes."""
     # Add UNIQUE constraint to user_roles (user_id, role_id)
     op.create_unique_constraint(
-        op.f('uq_user_roles_user_id'),
-        'user_roles',
-        ['user_id', 'role_id']
+        "uq_user_roles_user_id_role_id",
+        "user_roles",
+        ["user_id", "role_id"]
     )
     
     # Add UNIQUE constraint to role_permissions (role_id, permission_id)
     op.create_unique_constraint(
-        op.f('uq_role_permissions_role_id'),
-        'role_permissions',
-        ['role_id', 'permission_id']
+        "uq_role_permissions_role_id_permission_id",
+        "role_permissions",
+        ["role_id", "permission_id"]
     )
 
 
@@ -44,14 +44,14 @@ def downgrade() -> None:
     """Revert schema changes."""
     # Drop UNIQUE constraint from role_permissions
     op.drop_constraint(
-        op.f('uq_role_permissions_role_id'),
-        'role_permissions',
-        type_='unique'
+        "uq_role_permissions_role_id_permission_id",
+        "role_permissions",
+        type_="unique"
     )
     
     # Drop UNIQUE constraint from user_roles
     op.drop_constraint(
-        op.f('uq_user_roles_user_id'),
-        'user_roles',
-        type_='unique'
+        "uq_user_roles_user_id_role_id",
+        "user_roles",
+        type_="unique"
     )

@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
 class UserRole(Base):
     __tablename__ = "user_roles"
-    __table_args__ = (UniqueConstraint("user_id", "role_id"),)
+    __table_args__ = (UniqueConstraint("user_id", "role_id", name="uq_user_roles_user_id_role_id"),)
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4

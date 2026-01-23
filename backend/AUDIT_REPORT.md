@@ -1,6 +1,6 @@
 # DB Constraints & ORM Invariants Audit Report
 **STABILIZATION MODE - TASK A-6**
-Generated: 721.873118296
+Generated: 240.496614109
 
 ## Summary
 - **CRITICAL**: 0
